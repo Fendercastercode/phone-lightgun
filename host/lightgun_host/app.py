@@ -22,6 +22,7 @@ from .presets import PRESETS, apply_preset, button_labels, player_buttons
 from .autopreset import foreground_exe, foreground_title, preset_for
 from . import bindread
 from . import emucheck, emufix, emulocate
+from . import theme
 from .net import Receiver, local_ips
 from .overlay import Overlay
 from .store import Store, config_dir
@@ -116,26 +117,26 @@ class HostWindow(QWidget):
         self.w_spin = QDoubleSpinBox(decimals=3, minimum=0.0, maximum=10.0, singleStep=0.01, suffix=" m")
         self.h_spin = QDoubleSpinBox(decimals=3, minimum=0.0, maximum=10.0, singleStep=0.01, suffix=" m")
         self.diag_spin = QDoubleSpinBox(decimals=1, minimum=0.0, maximum=300.0, suffix=" in")
-        save_size = QPushButton("Save size")
+        save_size = QPushButton("Save size".upper())
         save_size.clicked.connect(self._save_size)
-        from_diag = QPushButton("From diagonal")
+        from_diag = QPushButton("From diagonal".upper())
         from_diag.clicked.connect(self._size_from_diag)
-        qr_btn = QPushButton("Show pairing QR")
+        qr_btn = QPushButton("Show pairing QR".upper())
         qr_btn.clicked.connect(lambda: self.show_qr(1))
-        p2_btn = QPushButton("Add player 2")
-        p2_btn.setToolTip("Shows a QR code that joins a second phone as player 2")
-        p2_btn.clicked.connect(lambda: self.show_qr(2))
-        self.pad_btn = QPushButton("Set up player 2 controller (driver)")
+        self.p2_btn = QPushButton("Add player 2".upper())
+        self.p2_btn.setToolTip("Shows a QR code that joins a second phone as player 2")
+        self.p2_btn.clicked.connect(lambda: self.show_qr(2))
+        self.pad_btn = QPushButton("Set up player 2 controller (driver)".upper())
         self.pad_btn.setToolTip("Player 2 aims through a virtual Xbox controller. Installs the free ViGEmBus "
                                 "driver (Windows asks for permission).")
         self.pad_btn.clicked.connect(self._install_pad_driver)
         self.pad_btn.setVisible(False)
         self._joined: set[int] = set()     # player 2+ guns that said hello
         self._pad_tried = False
-        hide_btn = QPushButton("Hide overlay")
-        hide_btn.clicked.connect(self.overlay.hide)
-        test_btn = QPushButton("Accuracy test (30 shots)")
-        test_btn.clicked.connect(self._accuracy_test)
+        self.hide_btn = QPushButton("Hide overlay".upper())
+        self.hide_btn.clicked.connect(self.overlay.hide)
+        self.test_btn = QPushButton("Accuracy test (30 shots)".upper())
+        self.test_btn.clicked.connect(self._accuracy_test)
         self.status = QLabel()
         self.emu_box = QGroupBox("Is the emulator seeing the gun?")
         self.emu_label = QLabel("Start an emulator - its settings are checked here.", wordWrap=True)
@@ -143,23 +144,23 @@ class HostWindow(QWidget):
         self.emu_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         emu_lay = QVBoxLayout(self.emu_box)
         emu_lay.addWidget(self.emu_label)
-        self.fix_btn = QPushButton("Fix emulator settings for the gun")
+        self.fix_btn = QPushButton("Fix emulator settings for the gun".upper())
         self.fix_btn.setToolTip("Edits the emulator's own config files. Every file is backed up first "
                                 "(Undo puts it back). Buttons you've bound yourself are kept. "
                                 "RetroArch: sets the light gun for the last game you loaded.")
         self.fix_btn.clicked.connect(lambda: self._fix_emulator(confirm=True))
         self.fix_btn.setEnabled(False)
-        choose_btn = QPushButton("Choose emulator…")
-        choose_btn.setToolTip("Point at mame.exe / retroarch.exe etc. if it isn't found automatically")
-        choose_btn.clicked.connect(self._choose_emulator)
+        self.choose_btn = QPushButton("Choose emulator…".upper())
+        self.choose_btn.setToolTip("Point at mame.exe / retroarch.exe etc. if it isn't found automatically")
+        self.choose_btn.clicked.connect(self._choose_emulator)
         fix_row = QHBoxLayout()
-        self.undo_btn = QPushButton("Undo last fix")
+        self.undo_btn = QPushButton("Undo last fix".upper())
         self.undo_btn.setToolTip("Puts back the emulator's files from the newest backup")
         self.undo_btn.clicked.connect(self._undo_fix)
         self.undo_btn.setEnabled(False)
         fix_row.addWidget(self.fix_btn, 1)
         fix_row.addWidget(self.undo_btn)
-        fix_row.addWidget(choose_btn)
+        fix_row.addWidget(self.choose_btn)
         emu_lay.addLayout(fix_row)
         self.allow_phone_fix = QCheckBox("Let the phone change emulator settings without asking here")
         self.allow_phone_fix.setChecked(bool(self.store.data.get("allow_phone_fix", False)))
@@ -173,7 +174,14 @@ class HostWindow(QWidget):
         self.log_view.setMaximumBlockCount(500)
         self.logline.connect(self.log_view.appendPlainText)
 
-        form = QFormLayout()
+        self.advanced_btn = QPushButton("Advanced mode".upper())
+        self.advanced_btn.setCheckable(True)
+        self.advanced_btn.setToolTip("Shows preset overrides, player 2 setup, the accuracy test and the raw log.")
+        top_row = QHBoxLayout()
+        top_row.addStretch(1)
+        top_row.addWidget(self.advanced_btn)
+
+        self.form = form = QFormLayout()
         form.addRow("Game monitor", self.mon_box)
         preset_row = QHBoxLayout()
         preset_row.addWidget(self.preset_box, 1)
@@ -192,15 +200,26 @@ class HostWindow(QWidget):
         diag_row.addWidget(from_diag)
         form.addRow("…or diagonal", diag_row)
         btns = QHBoxLayout()
-        for b in (qr_btn, p2_btn, self.pad_btn, hide_btn, test_btn):
+        for b in (qr_btn, self.p2_btn, self.pad_btn, self.hide_btn, self.test_btn):
             btns.addWidget(b)
         lay = QVBoxLayout(self)
+        lay.addLayout(top_row)
         lay.addLayout(form)
         lay.addLayout(btns)
         lay.addWidget(self.status)
         lay.addWidget(self.emu_box)
         lay.addWidget(self.log_view)
         self.resize(640, 480)
+
+        # Simple mode (default) shows only what's needed every session: monitor, pairing,
+        # screen size, connection status, and "is the gun working / Fix it". Everything else
+        # is one click away behind Advanced mode.
+        self._advanced_rows = [preset_row, self.live_binds, self.auto_fix, self.output_box, self.preset_notes]
+        self._advanced_widgets = [self.p2_btn, self.hide_btn, self.test_btn,
+                                  self.undo_btn, self.choose_btn, self.allow_phone_fix, self.log_view]
+        self.advanced_btn.setChecked(self.store.data.get("advanced_mode", False))
+        self.advanced_btn.toggled.connect(self._set_advanced)
+        self._set_advanced(self.advanced_btn.isChecked())
 
         h = QtLogHandler(self.logline.emit)
         h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S"))
@@ -319,7 +338,7 @@ class HostWindow(QWidget):
                 self.injector.gun_buttons[gid] = (dict(live.p2[0]), live.p2[1])
         if pad is not None:
             self.injector.gamepad = pad
-        self.pad_btn.setVisible(bool(self._joined) and pad is None and sys.platform == "win32")
+        self.pad_btn.setVisible(self._advanced and bool(self._joined) and pad is None and sys.platform == "win32")
 
     def _install_pad_driver(self):
         import subprocess
@@ -496,6 +515,17 @@ class HostWindow(QWidget):
         self.store.save()
         self._auto_exe = None
 
+    def _set_advanced(self, on: bool):
+        self._advanced = on
+        self.store.data["advanced_mode"] = on
+        self.store.save()
+        for row in self._advanced_rows:
+            self.form.setRowVisible(row, on)
+        for wdg in self._advanced_widgets:
+            wdg.setVisible(on)
+        if hasattr(self, "injector"):      # not yet built on the very first call, during __init__
+            self._apply_players()
+
     # ------------------------------------------------------------ emulator check
     ACTION_WORDS = {"mouse:left": "left click", "mouse:right": "right click", "mouse:middle": "middle click"}
 
@@ -648,15 +678,15 @@ class HostWindow(QWidget):
         else:
             bad = st.problems
             head = f"<b>{st.name}</b>" + (f" · {st.game}" if st.game else "")
-            rows.append(head + (" — <span style='color:#1a7f37'><b>set up for the gun ✓</b></span>" if not bad
-                                else f" — <span style='color:#c62828'><b>{len(bad)} problem(s)</b></span>"))
+            rows.append(head + (f" — <span style='color:{theme.LIME}'><b>set up for the gun ✓</b></span>" if not bad
+                                else f" — <span style='color:{theme.RED}'><b>{len(bad)} problem(s)</b></span>"))
             for c in st.checks:
-                mark = "<span style='color:#1a7f37'>✓</span>" if c.ok else "<span style='color:#c62828'>✗</span>"
+                mark = f"<span style='color:{theme.LIME}'>✓</span>" if c.ok else f"<span style='color:{theme.RED}'>✗</span>"
                 rows.append(f"{mark} {c.text}" + ("" if c.ok or not c.fix else f"<br>&nbsp;&nbsp;&nbsp;→ {c.fix}"))
         if self.cursor_ok is True:
-            rows.append("<span style='color:#1a7f37'>✓</span> Windows cursor follows the gun")
+            rows.append(f"<span style='color:{theme.LIME}'>✓</span> Windows cursor follows the gun")
         elif self.cursor_ok is False:
-            rows.append("<span style='color:#c62828'>✗</span> Windows cursor is NOT following the gun → if the "
+            rows.append(f"<span style='color:{theme.RED}'>✗</span> Windows cursor is NOT following the gun → if the "
                         "emulator runs as administrator, run start-host.bat as administrator too")
         if self._echo and time.monotonic() - self._echo[0] < 30:
             _, label, act = self._echo
@@ -879,6 +909,7 @@ def main(argv=None):
         set_dpi_aware()
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv[:1])
+    theme.apply_theme(app)
     w = HostWindow(args)
     w.show()
     QTimer.singleShot(800, w._warn_backend)   # e.g. Linux without /dev/uinput access
