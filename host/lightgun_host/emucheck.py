@@ -153,6 +153,16 @@ def check_retroarch(exe: Path) -> EmuStatus:
         except (TypeError, ValueError):
             pass
     gun_ports = [n for n, d in devices.items() if d & 0xFF == LIGHTGUN_CLASS]
+    if devices and len(gun_ports) < len(devices):
+        # some cores (Mesen's Zapper, FCEUmm's Zapper...) file their gun under a device class
+        # other than RETRO_DEVICE_LIGHTGUN; fall back to matching the core's own name for it
+        from .emufix import core_ports, looks_like_gun_device
+        dll = Path(core_path.replace("\\", "/"))
+        if not dll.exists():
+            dll = rp.cores / dll.name
+        by_id = {t["id"]: t["desc"] for p in core_ports(dll) for t in p}
+        gun_ports += [n for n, d in devices.items()
+                      if n not in gun_ports and looks_like_gun_device(by_id.get(d, ""))]
     if core.strip().upper() in ("MAME", "HBMAME"):
         # the MAME core has no gun device type: its "Lightgun Mode" option turns the gun on (port 1)
         mode = _read_kv(rp.overrides / core / f"{core}.opt", "=").get("mame_lightgun_mode", "none")

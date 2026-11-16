@@ -87,7 +87,17 @@ def mame_says_gun(short_name: str, mame_exe: str | None) -> bool | None:
 KONAMI_GUN_GAMES = ("lethal enforcers", "snatcher", "crypt killer", "policenauts")
 GUN_PREFERENCE = ("menacer", "guncon", "g-con", "super scope", "superscope", "zapper", "light gun",
                   "lightgun", "phaser", "virtua gun", "stunner", "gun", "justifier")
+# Some cores (Mesen's Zapper is RETRO_DEVICE_POINTER, FCEUmm's is RETRO_DEVICE_MOUSE) don't file
+# their gun under RETRO_DEVICE_LIGHTGUN at all, so a device class check alone misses them. Matched
+# by name instead; narrower than GUN_PREFERENCE (no bare "gun") to avoid false positives.
+GUN_DEVICE_NAMES = ("menacer", "guncon", "g-con", "super scope", "superscope", "zapper", "light gun",
+                     "lightgun", "virtua gun", "stunner", "justifier", "light phaser", "phaser")
 JOYPAD = 1
+
+
+def looks_like_gun_device(desc: str) -> bool:
+    d = desc.lower()
+    return any(h in d for h in GUN_DEVICE_NAMES)
 
 
 @dataclass
@@ -394,7 +404,8 @@ def core_ports(core_dll: Path, game: str | None = None) -> list:
 
 def pick_gun(ports: list, game: str, ext: str):
     """(port number 1-based, device id, device name) for this game, or None."""
-    guns = [(n + 1, t["id"], t["desc"]) for n, p in enumerate(ports) for t in p if t["id"] & 0xFF == 4]
+    guns = [(n + 1, t["id"], t["desc"]) for n, p in enumerate(ports) for t in p
+            if t["id"] & 0xFF == 4 or looks_like_gun_device(t["desc"])]
     if not guns:
         return None
     g = game.lower()

@@ -8,6 +8,10 @@ GPGX = [[{"desc": "MD Joypad 3 Button", "id": 257}, {"desc": "MS Light Phaser", 
         [{"desc": "MD Joypad 3 Button", "id": 257}, {"desc": "MD Menacer", "id": 516},
          {"desc": "MD Justifiers", "id": 772}, {"desc": "MS Light Phaser", "id": 260}]]
 PSX = [[{"desc": "Guncon / G-Con 45", "id": 260}, {"desc": "Justifier", "id": 516}]] * 2
+# Mesen's Zapper is RETRO_DEVICE_POINTER (class 6), not RETRO_DEVICE_LIGHTGUN (class 4)
+MESEN = [[{"desc": "Standard Controller", "id": 257}, {"desc": "Zapper", "id": 262}]] * 2
+# FCEUmm's Zapper is RETRO_DEVICE_MOUSE (class 2)
+FCEUMM = [[{"desc": "Gamepad", "id": 513}, {"desc": "Zapper", "id": 258}]] * 2
 
 
 def test_pick_gun_per_game():
@@ -17,6 +21,20 @@ def test_pick_gun_per_game():
     assert emufix.pick_gun(PSX, "Time Crisis (USA)", ".cue") == (1, 260, "Guncon / G-Con 45")
     assert emufix.pick_gun(PSX, "Lethal Enforcers I & II (USA)", ".cue") == (1, 516, "Justifier")
     assert emufix.pick_gun([[{"desc": "RetroPad", "id": 1}]], "x", ".bin") is None
+
+
+def test_pick_gun_by_name_outside_lightgun_class():
+    # Mesen (POINTER) and FCEUmm (MOUSE) file their Zapper outside RETRO_DEVICE_LIGHTGUN;
+    # pick_gun must still find it by name.
+    assert emufix.pick_gun(MESEN, "Wild Gunman (World)", ".nes") == (1, 262, "Zapper")
+    assert emufix.pick_gun(FCEUMM, "Wild Gunman (World)", ".nes") == (1, 258, "Zapper")
+
+
+def test_looks_like_gun_device():
+    assert emufix.looks_like_gun_device("Zapper")
+    assert emufix.looks_like_gun_device("Guncon / G-Con 45")
+    assert not emufix.looks_like_gun_device("Standard Controller")
+    assert not emufix.looks_like_gun_device("Gamepad")
 
 
 def test_apply_edit_keeps_other_lines_and_backs_up(tmp_path):

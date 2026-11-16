@@ -41,5 +41,28 @@ def test_retroarch_gun_ports(tmp_path):
     assert "port 2 gun start" in texts
 
 
+def test_retroarch_gun_port_outside_lightgun_class(tmp_path, monkeypatch):
+    # Mesen's Zapper is RETRO_DEVICE_POINTER (262), not RETRO_DEVICE_LIGHTGUN; the port should
+    # still be recognized once the fix has set it, via the core-probe name fallback.
+    from lightgun_host import emufix
+    monkeypatch.setattr(emufix, "core_ports",
+                         lambda dll, game=None: [[{"desc": "Standard Controller", "id": 257},
+                                                    {"desc": "Zapper", "id": 262}]] * 2)
+    ra = tmp_path
+    (ra / "retroarch.exe").write_bytes(b"")
+    (ra / "retroarch.cfg").write_text('input_driver = "dinput"\ninput_libretro_device_p1 = "262"\n'
+                                      'input_player1_mouse_index = "0"\ninput_player1_gun_trigger_mbtn = "1"\n'
+                                      'input_player1_gun_start_mbtn = "4"\n')
+    (ra / "info").mkdir()
+    (ra / "info" / "mesen_libretro.info").write_text('corename = "Mesen"\n')
+    (ra / "playlists" / "builtin").mkdir(parents=True)
+    (ra / "playlists" / "builtin" / "content_history.lpl").write_text(json.dumps({"items": [
+        {"path": r"C:\roms\Wild Gunman (World).nes", "core_path": r"C:\ra\cores\mesen_libretro.dll"}]}))
+    st = emucheck.check(str(ra / "retroarch.exe"))
+    assert st.game == "Wild Gunman (World)"
+    texts = " | ".join(c.text for c in st.checks)
+    assert "port 1 is a light gun" in texts
+
+
 def test_unknown_program():
     assert emucheck.check(r"C:\Windows\explorer.exe") is None
