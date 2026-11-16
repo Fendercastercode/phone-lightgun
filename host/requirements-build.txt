@@ -1,4 +1,6 @@
-# Only needed to freeze the host into a standalone PhoneBlaster.exe / PhoneBlaster binary.
+# Only needed to freeze the host into a standalone PhoneBlaster.exe / PhoneBlaster binary
+# (release.yml runs the test suite as a gate right before freezing, hence pytest here too).
 # Not needed to just run `python -m lightgun_host`.
 -r requirements.txt
 pyinstaller>=6.10
+pytest>=8
