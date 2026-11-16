@@ -73,6 +73,7 @@ class Session:
     views: list = field(default_factory=list)
     retried: bool = False
     test_rows: list = field(default_factory=list)
+    had_barrel: bool = False   # the phone already had a barrel going in (flow B: kept on failure)
 
 
 class Calibrator:
@@ -182,7 +183,7 @@ class Calibrator:
         if flow == "T":
             rnd = random.Random()
             targets = [(rnd.uniform(0.1, 0.9), rnd.uniform(0.1, 0.9)) for _ in range(30)]
-        self.s = Session(flow, list(targets), barrel, fit_t)
+        self.s = Session(flow, list(targets), barrel, fit_t, had_barrel=bool(msg.get("barrel")))
         self._target_msg()
 
     # ------------------------------------------------------------ B / C / D
@@ -220,8 +221,9 @@ class Calibrator:
             r = solver.solve_barrel(s.shots, self.screen, w_px, h_px, t_init=s.barrel.t, fit_t=s.fit_t)
             self._log_attempt("B", r)
             if r.rms_px > MAX_RMS_FRACTION * w_px:
+                kept = " Your previous barrel calibration was kept." if s.had_barrel else ""
                 return self._error("B", f"shots disagree by {r.rms_px:.0f} px - hold the phone the same way for "
-                                        f"every shot, aim carefully, and re-scan the TV if you moved it")
+                                        f"every shot, aim carefully, and re-scan the TV if you moved it.{kept}")
             self._finish({"type": "calib_result", "flow": "B", "ok": True, "rms_px": r.rms_px,
                           "barrel": r.barrel.to_dict(), "screen": self.screen.to_dict(),
                           "message": f"RMS {r.rms_px:.1f} px"},
