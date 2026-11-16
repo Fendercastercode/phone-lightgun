@@ -29,8 +29,13 @@ if [ ! -x .venv/bin/python ]; then
   fi
 fi
 
-# The window toolkit (Qt) needs this library on many distros
-if command -v ldconfig >/dev/null 2>&1 && ! ldconfig -p | grep -q "libxcb-cursor.so.0"; then
+# The window toolkit (Qt) needs this library on many distros. ldconfig usually lives in
+# /sbin or /usr/sbin, which often isn't on a regular (non-root) user's PATH, so fall back
+# to the usual absolute paths when `command -v` can't find it.
+LDCONFIG=$(command -v ldconfig || true)
+[ -z "$LDCONFIG" ] && [ -x /sbin/ldconfig ] && LDCONFIG=/sbin/ldconfig
+[ -z "$LDCONFIG" ] && [ -x /usr/sbin/ldconfig ] && LDCONFIG=/usr/sbin/ldconfig
+if [ -n "$LDCONFIG" ] && ! "$LDCONFIG" -p | grep -q "libxcb-cursor.so.0"; then
   echo "Note: if the window doesn't open, install libxcb-cursor:"
   echo "  Ubuntu/Debian: sudo apt install libxcb-cursor0    Fedora: sudo dnf install xcb-util-cursor"
 fi
