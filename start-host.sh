@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Start the PhoneBlaster PC host on Linux. The first run sets everything up.
 #   chmod +x start-host.sh   (once)   then   ./start-host.sh
+SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute: the cd below moves us into host/
 cd "$(dirname "$0")/host" || exit 1
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -58,7 +59,7 @@ if [ ! -w /dev/uinput ]; then
       echo "Done. (After your next log-in this is permanent.)"
       # this session doesn't have the new group yet: carry on inside it
       if [ ! -w /dev/uinput ] && command -v sg >/dev/null 2>&1; then
-        exec sg input -c "$(printf '%q ' "$0" "$@")"
+        exec sg input -c "$(printf '%q ' "$SCRIPT" "$@")"
       fi
       ;;
   esac
