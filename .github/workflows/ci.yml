@@ -41,6 +41,12 @@ jobs:
           distribution: "temurin"
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          # Override the action's default ("tools platform-tools") - the standalone
+          # "tools" package was removed from the SDK repository years ago and installing
+          # it now just fails. Gradle/AGP downloads whatever platform/build-tools version
+          # it actually needs on its own, using the licenses this action already accepts.
+          packages: "platform-tools"
       - name: Unit tests
         working-directory: android
         run: ./gradlew testDebugUnitTest --no-daemon

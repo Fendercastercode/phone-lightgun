@@ -33,7 +33,11 @@ EXE_PRESETS: list[tuple[str, str]] = [
 def preset_for(exe: str | None) -> str | None:
     if not exe:
         return None
-    name = os.path.splitext(os.path.basename(exe))[0].lower()
+    # os.path.basename only understands the running OS's own separator (posixpath doesn't
+    # split on "\\"); normalize first so this matches a Windows-style exe path consistently
+    # regardless of which OS is actually running the code (real paths from a Linux/Pi build
+    # never contain "\\" anyway, so this is a no-op there).
+    name = os.path.splitext(os.path.basename(exe.replace("\\", "/")))[0].lower()
     for prefix, preset in EXE_PRESETS:
         if name.startswith(prefix):
             return preset

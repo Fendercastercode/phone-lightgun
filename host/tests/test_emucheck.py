@@ -29,7 +29,7 @@ def test_retroarch_gun_ports(tmp_path):
     (ra / "info" / "genesis_plus_gx_libretro.info").write_text('corename = "Genesis Plus GX"\n')
     (ra / "playlists" / "builtin").mkdir(parents=True)
     (ra / "playlists" / "builtin" / "content_history.lpl").write_text(json.dumps({"items": [
-        {"path": "C:\roms\Lethal Enforcers (U) [!].bin", "core_path": "C:\ra\cores\genesis_plus_gx_libretro.dll"}]}))
+        {"path": r"C:\roms\Lethal Enforcers (U) [!].bin", "core_path": r"C:\ra\cores\genesis_plus_gx_libretro.dll"}]}))
     rm = ra / "config" / "remaps" / "Genesis Plus GX"
     rm.mkdir(parents=True)
     (rm / "Lethal Enforcers (U) [!].rmp").write_text('input_libretro_device_p2 = "772"\n')

@@ -1,3 +1,7 @@
+import sys
+
+import pytest
+
 from lightgun_host import emufix
 
 GPGX = [[{"desc": "MD Joypad 3 Button", "id": 257}, {"desc": "MS Light Phaser", "id": 260}],
@@ -39,7 +43,7 @@ def test_mame_plan(tmp_path):
 
 
 def test_retroarch_settings_in_appdata(tmp_path, monkeypatch):
-    """Installed RetroArch: program in one folder, settings in %APPDATA%\RetroArch."""
+    r"""Installed RetroArch: program in one folder, settings in %APPDATA%\RetroArch."""
     import sys
     from lightgun_host import emucheck, emulocate
     prog = tmp_path / "Program Files" / "RetroArch"
@@ -71,6 +75,10 @@ def test_mame_plan_creates_missing_ini(tmp_path):
     assert plan.create_mame_ini and plan.edits
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason=(
+    "tests the Windows-only 'player 2 aims with the virtual pad's right stick' workaround "
+    "(plan_mame branches on sys.platform); on Linux the x11 lightgun provider gives each "
+    "phone its own real gun device instead, so no cfg edit is needed or expected there."))
 def test_mame_player2_cfg(tmp_path):
     (tmp_path / "mame.exe").write_bytes(b"")
     (tmp_path / "mame.ini").write_text("lightgun 1\nlightgun_device lightgun\nlightgunprovider win32\n")
