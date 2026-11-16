@@ -1,0 +1,5 @@
+{
+  "name": "printed-top",
+  "description": "lightgun_grip.scad mount=top: screen up, top edge forward, camera sees the floor",
+  "barrel": {"b": [0, 1, 0], "t": [0, 0, 0.0108]}
+}

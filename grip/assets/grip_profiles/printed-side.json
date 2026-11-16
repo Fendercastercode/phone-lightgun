@@ -1,0 +1,5 @@
+{
+  "name": "printed-side",
+  "description": "lightgun_grip.scad mount=side: screen faces left, top edge forward, camera sees the room to the right",
+  "barrel": {"b": [0, 1, 0], "t": [0, 0, 0]}
+}

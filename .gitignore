@@ -1,0 +1,23 @@
+host/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+accuracy_*.csv
+*.lglog
+grip/*.stl
+
+# Secrets - never commit these. See android/keystore/README.md and host's signing docs.
+android/keystore/*.jks
+android/keystore/*.keystore
+android/keystore/keystore.properties
+host/dist/
+host/build/
+*.spec.bak
+*.pfx
+*.p12

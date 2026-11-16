@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  host-tests:
+    name: Host tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: host/requirements.txt
+      - name: Install dependencies
+        working-directory: host
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run tests
+        working-directory: host
+        run: python -m pytest -q
+
+  android-build:
+    name: Android build + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+        # No release build here: that needs the signing keystore, which only exists
+        # locally for now (android/keystore/, gitignored). See release.yml for the
+        # path once that key is wired up as a repo secret.

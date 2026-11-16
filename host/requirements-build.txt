@@ -1,0 +1,4 @@
+# Only needed to freeze the host into a standalone PhoneBlaster.exe / PhoneBlaster binary.
+# Not needed to just run `python -m lightgun_host`.
+-r requirements.txt
+pyinstaller>=6.10
