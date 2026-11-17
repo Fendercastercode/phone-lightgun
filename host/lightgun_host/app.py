@@ -52,7 +52,10 @@ class HostWindow(QWidget):
         super().__init__()
         self.setWindowTitle("RetroSight — PC Host")
         # --dry-run (testing) must never touch the real settings (monitor, key, screen sizes)
-        self.store = Store(config_dir() / "config-dryrun.json") if args.dry_run else Store()
+        store_path = config_dir() / "config-dryrun.json" if args.dry_run else config_dir() / "config.json"
+        if args.reset_config and store_path.exists():
+            store_path.unlink()
+        self.store = Store(store_path)
         if args.new_key:
             self.store.regenerate_key()
         self.backend = NullBackend() if args.dry_run else make_backend()
@@ -177,7 +180,13 @@ class HostWindow(QWidget):
         self.advanced_btn = QPushButton("Advanced mode".upper())
         self.advanced_btn.setCheckable(True)
         self.advanced_btn.setToolTip("Shows preset overrides, player 2 setup, the accuracy test and the raw log.")
+        self.reset_config_btn = QPushButton("Reset all PC settings".upper())
+        self.reset_config_btn.setToolTip("Wipes the pairing key, screen sizes, monitor and preset, then restarts - "
+                                         "every phone will need to re-pair and every screen will need remeasuring. "
+                                         "Mainly for testing setup from scratch.")
+        self.reset_config_btn.clicked.connect(self._reset_config)
         top_row = QHBoxLayout()
+        top_row.addWidget(self.reset_config_btn)
         top_row.addStretch(1)
         top_row.addWidget(self.advanced_btn)
 
@@ -224,7 +233,8 @@ class HostWindow(QWidget):
         # is one click away behind Advanced mode.
         self._advanced_rows = [preset_row, self.live_binds, self.auto_fix, self.output_box, self.preset_notes]
         self._advanced_widgets = [self.p2_btn, self.hide_btn, self.test_btn,
-                                  self.undo_btn, self.choose_btn, self.allow_phone_fix, self.log_view]
+                                  self.undo_btn, self.choose_btn, self.allow_phone_fix, self.log_view,
+                                  self.reset_config_btn]
         self.advanced_btn.setChecked(self.store.data.get("advanced_mode", False))
         self.advanced_btn.toggled.connect(self._set_advanced)
         self._set_advanced(self.advanced_btn.isChecked())
@@ -800,6 +810,25 @@ class HostWindow(QWidget):
         self.h_spin.setValue(d * math.sin(a))
         self._save_size()
 
+    def _reset_config(self):
+        """Wipes this store's file (pairing key, screen sizes, monitor, preset, everything) and
+        quits, so the next launch starts from a clean config - mainly for testing setup from
+        scratch without a phone's old pairing/location data confusing things."""
+        if QMessageBox.question(self, "Reset all PC settings",
+                "This deletes the pairing key, every screen's measured size, and all other saved "
+                "settings on this PC.\n\nEvery phone will need to re-pair (scan a new QR code), "
+                "and every screen will need remeasuring.\n\nThe app will close - start it again "
+                "after this.\n\nReset everything?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            self.store.path.unlink(missing_ok=True)
+        except OSError as e:
+            QMessageBox.warning(self, "Reset failed", f"Could not delete {self.store.path}:\n{e}")
+            return
+        log.info("config reset: deleted %s", self.store.path)
+        QApplication.instance().quit()
+
     def show_qr(self, player: int = 1):
         ip = local_ips()[0]
         uri = P.pairing_uri(ip, self.rx.port, self.store.key, player - 1)
@@ -919,6 +948,8 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=None, help="UDP port (default from config, 47800)")
     ap.add_argument("--monitor", type=int, default=None, help="monitor index to drive")
     ap.add_argument("--new-key", action="store_true", help="regenerate the pairing key")
+    ap.add_argument("--reset-config", action="store_true",
+                    help="wipe all saved PC settings (pairing key, screen sizes, monitor, preset) before starting")
     ap.add_argument("--log", help="append raw packets to this binary log (tools/log_replay.py)")
     ap.add_argument("--dry-run", action="store_true", help="do not inject input (testing)")
     ap.add_argument("-v", "--verbose", action="store_true")
