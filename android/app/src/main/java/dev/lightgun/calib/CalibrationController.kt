@@ -79,6 +79,19 @@ class CalibrationController(private val send: (JSONObject) -> Unit) {
         set(State(message = "Cancelled"))
     }
 
+    /**
+     * Like [cancel], but for a specific, explained reason (e.g. the camera lost track of the
+     * room mid-scan) rather than the player's own choice: tells the host to drop its in-progress
+     * session, and leaves the player on a FAILED state with instructions instead of silently
+     * restarting or letting bad data reach the solver, where it only surfaces later as a
+     * confusing geometry-mismatch error.
+     */
+    fun abort(flow: String, message: String) {
+        pendingRequest = null
+        send(JSONObject().put("type", "calib_cancel"))
+        set(State(Phase.FAILED, flow, message = message))
+    }
+
     /** Host messages (any thread). Returns true if consumed. */
     fun onHostMessage(msg: JSONObject): Boolean {
         if (msg.optString("type").startsWith("calib")) {

@@ -64,6 +64,15 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
     @Volatile var screenLostListener: ((String) -> Unit)? = null
     @Volatile var anchorJumps = 0
         private set
+    /**
+     * Bumped every time ARCore loses tracking and comes back in a different map (new, unrelated
+     * coordinate origin) - whether or not a screen is anchored yet. Flow A/Q sweep a camera over
+     * several seconds assuming one consistent world; a caller mid-sweep should poll this and
+     * restart (with a clear "tracking lost" message) rather than let inconsistent frames reach
+     * the solver, where they only surface much later as a confusing geometry-mismatch error.
+     */
+    @Volatile var worldEpoch = 0
+        private set
 
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
@@ -268,6 +277,7 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
             offV = step(offV, offTargetV, offRateV * dt)
         }
         val a = anchor
+        if (resumed != null) worldEpoch++
         // Tracking just came back. If the anchor isn't tracking, ARCore is in a new world frame:
         // carry the screen over with the gyro bridge instead of demanding a re-calibration.
         if (resumed != null && a != null && a.trackingState != TrackingState.TRACKING) {

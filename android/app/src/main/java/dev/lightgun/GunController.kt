@@ -350,20 +350,41 @@ class GunController private constructor(private val app: Context) : SensorEventL
     }
 
     // ---------------------------------------------------------------- calibration
+    // Shown when ARCore loses track of the room partway through a flow A/Q sweep: observations
+    // taken before and after that are in different, incompatible coordinate frames, which the
+    // solver can only report much later as a confusing geometry-mismatch error - so catch it the
+    // moment it happens instead and tell the player exactly what to do about it.
+    private val trackingLostMessage = "Lost track of the room mid-scan, so the measurements no longer " +
+        "line up. Turn on a light, avoid sweeping over blank walls/ceilings or mirrors, and move " +
+        "slower this time - then try again."
+
     fun startCalibration(flow: String, fitT: Boolean = false) {
         if (flow == "Q") {  // quick lock: just look for the markers, no sweep coaching
+            val startEpoch = engine.worldEpoch
             engine.cameraFrameListener = { f ->
-                val omega = fuser.current(SystemClock.elapsedRealtimeNanos(), predict = false).omega.norm()
-                if (omega < ScanCoach.MAX_OMEGA) scanner.submit(f)
+                if (engine.worldEpoch != startEpoch) {
+                    engine.cameraFrameListener = null
+                    calib.abort("Q", trackingLostMessage)
+                } else {
+                    val omega = fuser.current(SystemClock.elapsedRealtimeNanos(), predict = false).omega.norm()
+                    if (omega < ScanCoach.MAX_OMEGA) scanner.submit(f)
+                }
             }
         }
         if (flow == "A") {
             coach.start()
+            val startEpoch = engine.worldEpoch
             engine.cameraFrameListener = { f ->
-                val omega = fuser.current(SystemClock.elapsedRealtimeNanos(), predict = false).omega.norm()
-                coach.onPose(f.tNs, f.q, f.p, omega)
-                // blurred / rolling-shutter-skewed frames poison the triangulation: skip them
-                if (omega < ScanCoach.MAX_OMEGA) scanner.submit(f)
+                if (engine.worldEpoch != startEpoch) {
+                    engine.cameraFrameListener = null
+                    coach.stop()
+                    calib.abort("A", trackingLostMessage)
+                } else {
+                    val omega = fuser.current(SystemClock.elapsedRealtimeNanos(), predict = false).omega.norm()
+                    coach.onPose(f.tNs, f.q, f.p, omega)
+                    // blurred / rolling-shutter-skewed frames poison the triangulation: skip them
+                    if (omega < ScanCoach.MAX_OMEGA) scanner.submit(f)
+                }
             }
         }
         calib.request(flow, barrel.toJson(), engine.sessionId, fitT)

@@ -546,6 +546,8 @@ private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.St
                 }
                 cal.phase == Phase.FAILED && !aim.calibrated -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("LOCK-ON FAILED", style = arcade(14.sp, Neon.Red, glow = Neon.Red))
+                    if (cal.message.isNotEmpty()) Text(cal.message.uppercase(),
+                        style = arcade(9.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 13.sp))
                     ArcadeButton("TRY AGAIN", { gun.startCalibration(if (gun.hostKnowsSize) "Q" else "C") }, small = true, color = Neon.Lime)
                 }
                 !aim.connected -> Blink { a -> Text("INSERT COIN", Modifier.alpha(a), style = arcade(18.sp, Neon.Yellow, glow = Neon.Orange)) }
