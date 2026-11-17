@@ -30,6 +30,17 @@ over UDP as an absolute mouse position.
    the PC window shows the emulator isn't seeing the gun yet.
 7. Aim at the TV and pull the trigger.
 
+**Does the order matter?** Only the PC app has to be running before the phone pairs. RetroArch
+(or MAME, etc.) can be opened before or after it: the PC app checks the window in front every
+second, picks the emulator preset, and sets the emulator up for the gun when it needs it.
+
+**Switching games:** just load the next game - no need to restart anything. MAME is followed by
+its window title. RetroArch is asked directly which game is running, which needs its **Network
+Commands** setting on (Settings > Network > Network Commands; **Fix** turns it on). Without it the
+PC app can only guess from RetroArch's history, so it keeps showing the last game played after you
+go back to the menu or close RetroArch. After a fix changes a game's settings, RetroArch needs that
+game loaded again; the PC window and the phone both say so.
+
 Everything below is reference detail for each of those steps and for troubleshooting.
 
 **PC host** (Python 3.10+):

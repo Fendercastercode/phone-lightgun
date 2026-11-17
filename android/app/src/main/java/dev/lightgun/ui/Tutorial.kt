@@ -192,17 +192,19 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
 
     Stage("accuracy", "Accuracy test", "ACCURACY TEST (OPTIONAL)", Neon.Magenta,
         "See how accurate your setup is.",
-        listOf("On the PC window, click ACCURACY TEST (30 SHOTS).", "Shoot each target. The PC shows your score at the end."),
+        listOf("Tap START TEST. 30 targets appear on the TV, one at a time.", "Shoot each one. The PC shows your score at the end."),
         Art.ACCURACY, pane = Pane.FIRE, success = "The PC shows your score. Under 1% is great.",
-        waiting = "Shoot the targets on the PC", done = { g, b -> result(g, b, "T") }),
+        waiting = "Shoot the targets on the TV", action = "▶ START TEST" to { g -> g.startCalibration("T") },
+        done = { g, b -> result(g, b, "T") }),
 
     Stage("game", "Set up a game", "READY TO PLAY!", Neon.Lime,
-        "Last step: tell your game to use the gun.",
-        listOf("In the PC window, set Emulator preset to RetroArch (or your emulator).",
-            "RetroArch: Settings > Drivers > Input = raw; run the game full screen on the same monitor.",
-            "Set Port 1 to the gun: Zapper (NES), GunCon (PS1), Menacer/Justifier (Genesis). Then tap PLAY!"),
+        "Last step: start a game on the PC. The PC app spots the emulator and game by itself.",
+        listOf("On the PC, open RetroArch (or MAME, etc.) and load a light-gun game, full screen.",
+            "The PC window shows if the emulator isn't seeing the gun - click FIX there (or tap FIX in PLAY).",
+            "RetroArch: after a fix, load the game again. Then tap PLAY!"),
         Art.GAME, success = "Shots land where you aim in the game.",
-        stuck = listOf("Other emulators: see host/presets.md in the RetroSight folder on your PC."),
+        stuck = listOf("Switched games? Just load the new one - the PC follows it (RetroArch needs Network Commands on; FIX turns it on).",
+            "Other emulators: see host/presets.md in the RetroSight folder on your PC."),
         waiting = "Tap PLAY!", action = "\u25B6 PLAY!" to { _ -> }, skippable = false, done = { _, _ -> false }),
 )
 
