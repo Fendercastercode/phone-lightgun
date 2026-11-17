@@ -1,7 +1,7 @@
 """Fix an emulator's settings so it reads the phone gun.
 
 Before anything is saved, every file about to change is copied into a dated backup folder
-(PhoneBlaster's settings folder / backups / <emulator> / <date-time>), and a file that didn't exist
+(RetroSight's settings folder / backups / <emulator> / <date-time>), and a file that didn't exist
 yet is noted as new. "Undo" puts the last backup back. Bindings you already have are kept: the
 fix only adds a binding where a function has nothing the phone can press.
 Files the emulator rewrites when it exits (RetroArch's retroarch.cfg and core options) are

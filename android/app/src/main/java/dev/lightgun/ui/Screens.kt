@@ -94,7 +94,7 @@ fun LightGunApp(gun: GunController, route: Route, onNavigate: (Route) -> Unit, o
     }
 }
 
-/** Start-up title: the PhoneBlaster logo slams in, shines, TAP TO START blinks. Tap or wait to skip. */
+/** Start-up title: the RetroSight logo slams in, shines, TAP TO START blinks. Tap or wait to skip. */
 @Composable
 private fun SplashScreen(onDone: () -> Unit) {
     var t by remember { mutableStateOf(0f) }
@@ -107,7 +107,7 @@ private fun SplashScreen(onDone: () -> Unit) {
         val zoom = if (t < 0.45f) 1f + 2.5f * (1f - t / 0.45f).let { it * it } else 1f
         val a = (t / 0.2f).coerceIn(0f, 1f) * ((3.4f - t) / 0.4f).coerceIn(0f, 1f)
         val shine = ((t - 0.6f) / 1.2f).let { if (it in 0f..1.1f) it else -1f }
-        drawPhoneBlasterLogo(androidx.compose.ui.geometry.Offset(size.width / 2f, size.height * 0.42f), size.width * 0.82f * zoom, shine, a)
+        drawRetroSightLogo(androidx.compose.ui.geometry.Offset(size.width / 2f, size.height * 0.42f), size.width * 0.82f * zoom, shine, a)
         if (t in 0.45f..0.75f) drawRect(Color.White.copy(alpha = (0.75f - t) / 0.3f * 0.6f))   // impact flash
         if (t > 1f && (t * 2.2f).toInt() % 2 == 0) {
             val msg = "TAP TO START"

@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 
 /**
@@ -128,18 +129,32 @@ fun DrawScope.drawArcadeText(text: String, topLeft: Offset, px: Float, palette: 
     }
 }
 
-/** The PhoneBlaster logo: chrome PHONE + fire BLASTER, sized to [width] px, centred at [center]. */
-fun DrawScope.drawPhoneBlasterLogo(center: Offset, width: Float, shine: Float = -1f, alpha: Float = 1f, subtitle: Boolean = true) {
-    val total = PixelFont.width("PHONE") + 3 + PixelFont.width("BLASTER")
+/** A small crosshair reticle over the centre of one letter, in a word drawn by [drawArcadeText]. */
+private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Float, letterIndex: Int,
+                                           color: Color, alpha: Float) {
+    val cx = letterIndex * PixelFont.ADVANCE + 2f   // centre column of a 5-wide glyph
+    val cy = (PixelFont.ROWS - 1) / 2f              // centre row
+    val lean0 = (PixelFont.ROWS - 1 - cy) * px * lean
+    val center = Offset(topLeft.x + cx * px + lean0, topLeft.y + cy * px + px * 0.5f)
+    val r = px * 1.6f
+    drawCircle(color.copy(alpha = alpha), radius = r, center = center, style = Stroke(width = px * 0.5f))
+    drawLine(color.copy(alpha = alpha), Offset(center.x - r * 1.4f, center.y), Offset(center.x + r * 1.4f, center.y), strokeWidth = px * 0.4f)
+    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y - r * 1.4f), Offset(center.x, center.y + r * 1.4f), strokeWidth = px * 0.4f)
+}
+
+/** The RetroSight logo: chrome RETR[O] (with a crosshair reticle in place of the O) + fire SIGHT, sized to [width] px, centred at [center]. */
+fun DrawScope.drawRetroSightLogo(center: Offset, width: Float, shine: Float = -1f, alpha: Float = 1f, subtitle: Boolean = true) {
+    val total = PixelFont.width("RETRO") + 3 + PixelFont.width("SIGHT")
     val px = width / (total + PixelFont.ROWS * 0.28f + 2f)
     val h = PixelFont.ROWS * px
     val left = center.x - width / 2f
     val top = center.y - h / 2f - (if (subtitle) px * 2.5f else 0f)
-    drawArcadeText("PHONE", Offset(left, top), px, PixelFont.chrome, shine = shine, alpha = alpha,
+    drawArcadeText("RETRO", Offset(left, top), px, PixelFont.chrome, shine = shine, alpha = alpha,
         startColumn = 0, totalColumns = total)
-    val zx = left + (PixelFont.width("PHONE") + 3) * px
-    drawArcadeText("BLASTER", Offset(zx, top), px, PixelFont.fire, depth = Color(0xFF5A0A10), shine = shine, alpha = alpha,
-        startColumn = PixelFont.width("PHONE") + 3, totalColumns = total)
+    drawLetterCrosshair(Offset(left, top), px, 0.28f, letterIndex = 4, color = Color(0xFFFF2244), alpha = alpha)
+    val zx = left + (PixelFont.width("RETRO") + 3) * px
+    drawArcadeText("SIGHT", Offset(zx, top), px, PixelFont.fire, depth = Color(0xFF5A0A10), shine = shine, alpha = alpha,
+        startColumn = PixelFont.width("RETRO") + 3, totalColumns = total)
     if (subtitle) {
         val sub = "LIGHT GUN FOR ANY DISPLAY"
         val spx = px * 0.42f
@@ -150,8 +165,8 @@ fun DrawScope.drawPhoneBlasterLogo(center: Offset, width: Float, shine: Float = 
 }
 
 @Composable
-fun PhoneBlasterLogo(modifier: Modifier = Modifier, shine: Float = -1f, alpha: Float = 1f) {
+fun RetroSightLogo(modifier: Modifier = Modifier, shine: Float = -1f, alpha: Float = 1f) {
     Canvas(modifier.fillMaxWidth().aspectRatio(5.2f)) {
-        drawPhoneBlasterLogo(Offset(size.width / 2f, size.height / 2f), size.width * 0.96f, shine, alpha)
+        drawRetroSightLogo(Offset(size.width / 2f, size.height / 2f), size.width * 0.96f, shine, alpha)
     }
 }

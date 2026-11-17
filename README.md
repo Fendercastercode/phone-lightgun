@@ -1,4 +1,4 @@
-# Phone Light Gun
+# RetroSight
 
 This project turns an ARCore phone into an absolute-aim light gun for PC emulators. The
 phone can sit in a 3D-printed grip in any orientation. ARCore gives a pose that does not
@@ -27,11 +27,22 @@ python -m venv .venv
 
 Or just double-click `start-host.bat` in the project folder; it sets everything up on first run.
 
+**Don't have RetroArch yet?** Grab it straight from the source instead of your distro's
+app store, which is often outdated or missing cores:
+* **Windows:** [RetroArch-Win64-setup.exe](https://buildbot.libretro.com/stable/1.22.2/windows/x86_64/RetroArch-Win64-setup.exe) — double-click installer, also upgrades an existing install.
+* **Debian / Raspberry Pi OS:** `sudo apt install retroarch` (pulls it from Debian's own repos).
+* **Ubuntu:** `sudo add-apt-repository ppa:libretro/stable && sudo apt update && sudo apt install retroarch` (newer than Ubuntu's own package).
+* **Any Linux (Flatpak):** `flatpak install flathub org.libretro.RetroArch`.
+
+After installing, use RetroArch's own **Online Updater → Core Downloader** to grab the
+cores for the systems you want (see [host/presets.md](host/presets.md) for which cores each
+preset expects).
+
 **Linux:** run `./start-host.sh` (first time: `chmod +x start-host.sh`, or `bash start-host.sh`).
 On the first run it:
 * builds the Python environment, and tells you which package to install if something is missing
   (`python3-venv`, a compiler for `evdev`, `libxcb-cursor0` for the window);
-* offers to give PhoneBlaster access to `/dev/uinput`, which it needs to create its virtual light
+* offers to give RetroSight access to `/dev/uinput`, which it needs to create its virtual light
   guns. It asks for your password once: it adds a udev rule, loads the `uinput` module and puts
   you in the `input` group. It carries on in the same session; after the next log-in the access is
   permanent;

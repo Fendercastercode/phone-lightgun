@@ -1,4 +1,4 @@
-// Phone Light Gun — parametric pistol grip (OpenSCAD)
+// RetroSight — parametric pistol grip (OpenSCAD)
 //
 // The phone lies in a cradle with its TOP EDGE pointing toward the muzzle. In phone
 // (Android sensor) coordinates the barrel direction is therefore +Y for every mount

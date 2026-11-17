@@ -138,7 +138,7 @@ fun RetroBackground(animate: Boolean, modifier: Modifier = Modifier, content: @C
             if (animate) arena.draw(this, textMeasurer)
             // scrim: keeps the scene visible but subdued so nothing competes with text
             drawRect(Neon.Night.copy(alpha = 0.45f))
-            if (animate) arena.drawOverlay(this)   // the PhoneBlaster logo flies in now and then
+            if (animate) arena.drawOverlay(this)   // the RetroSight logo flies in now and then
             drawContent()
             // scanlines + vignette on top of everything
             var y = 0f

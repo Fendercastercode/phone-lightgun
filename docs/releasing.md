@@ -8,7 +8,7 @@ host pytest on Windows + Linux, and an Android debug build + unit tests.
 Pushing a tag like `v0.2.0` (or running the workflow manually from the Actions
 tab) fires `.github/workflows/release.yml`, which:
 
-1. Builds the PhoneBlaster host with PyInstaller for Windows, Linux x86_64,
+1. Builds the RetroSight host with PyInstaller for Windows, Linux x86_64,
    and 64-bit Raspberry Pi OS (aarch64) - three separate jobs, each on its own
    GitHub-hosted runner (the Pi build uses a native arm64 runner, not QEMU).
 2. Packages each as a zip (Windows) or tarball (Linux/Pi) with its launcher
@@ -41,7 +41,7 @@ tab) fires `.github/workflows/release.yml`, which:
     secret; both of the above services sign via a short-lived token instead.
 - **Android release build/signing in CI.** `android-build` in `ci.yml` only
   builds+tests the debug variant. The release keystore
-  (`android/keystore/phoneblaster-release.jks`) only exists locally right now
+  (`android/keystore/RetroSight-release.jks`) only exists locally right now
   (gitignored - see `android/keystore/README.md`). Wiring a release AAB build
   into CI means putting that keystore into repo secrets first - ask before
   doing that, since it's the first time the signing key would leave this

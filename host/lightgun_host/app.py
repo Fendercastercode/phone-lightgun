@@ -50,7 +50,7 @@ class HostWindow(QWidget):
 
     def __init__(self, args):
         super().__init__()
-        self.setWindowTitle("PhoneBlaster — PC Host")
+        self.setWindowTitle("RetroSight — PC Host")
         # --dry-run (testing) must never touch the real settings (monitor, key, screen sizes)
         self.store = Store(config_dir() / "config-dryrun.json") if args.dry_run else Store()
         if args.new_key:
@@ -100,7 +100,7 @@ class HostWindow(QWidget):
         self.live_binds.setChecked(self.store.data.get("live_binds", True))
         self.live_binds.toggled.connect(self._live_binds_toggled)
         self.auto_fix = QCheckBox("Set up the emulator automatically (backs up first)")
-        self.auto_fix.setToolTip("When the emulator in front isn't set up for the gun, PhoneBlaster fixes its "
+        self.auto_fix.setToolTip("When the emulator in front isn't set up for the gun, RetroSight fixes its "
                                  "settings right away. Every file is backed up first - 'Undo last fix' puts it back.")
         self.auto_fix.setChecked(self.store.data.get("auto_fix", True))
         self.auto_fix.toggled.connect(lambda on: (self.store.data.__setitem__("auto_fix", on), self.store.save()))
@@ -710,7 +710,7 @@ class HostWindow(QWidget):
     def _warn_backend(self):
         if self.backend_problem:
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "PhoneBlaster", self.backend_problem)
+            QMessageBox.warning(self, "RetroSight", self.backend_problem)
 
     def _watchdogs(self):
         for c in self.calibs.values():
@@ -782,7 +782,7 @@ class HostWindow(QWidget):
         ip = local_ips()[0]
         uri = P.pairing_uri(ip, self.rx.port, self.store.key, player - 1)
         who = "" if player == 1 else f"PLAYER {player}: "
-        self.overlay.show_qr(uri, f"{who}Scan with the PhoneBlaster app  —  {ip}:{self.rx.port}   (Esc to close)")
+        self.overlay.show_qr(uri, f"{who}Scan with the RetroSight app  —  {ip}:{self.rx.port}   (Esc to close)")
 
     def _accuracy_test(self):
         self.calib.start({"type": "calib_request", "flow": "T", "ar_session": self.calib.ar_session})
@@ -887,7 +887,7 @@ class HostWindow(QWidget):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="PhoneBlaster PC host")
+    ap = argparse.ArgumentParser(description="RetroSight PC host")
     ap.add_argument("--port", type=int, default=None, help="UDP port (default from config, 47800)")
     ap.add_argument("--monitor", type=int, default=None, help="monitor index to drive")
     ap.add_argument("--new-key", action="store_true", help="regenerate the pairing key")
@@ -910,7 +910,10 @@ def main(argv=None):
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv[:1])
     theme.apply_theme(app)
+    icon = theme.make_crosshair_icon()
+    app.setWindowIcon(icon)
     w = HostWindow(args)
+    w.setWindowIcon(icon)
     w.show()
     QTimer.singleShot(800, w._warn_backend)   # e.g. Linux without /dev/uinput access
     return app.exec()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the PhoneBlaster PC host on Linux. The first run sets everything up.
+# Start the RetroSight PC host on Linux. The first run sets everything up.
 #   chmod +x start-host.sh   (once)   then   ./start-host.sh
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute: the cd below moves us into host/
 cd "$(dirname "$0")/host" || exit 1
@@ -13,7 +13,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 if [ ! -x .venv/bin/python ]; then
-  echo "First run: setting up PhoneBlaster (a minute or two)..."
+  echo "First run: setting up RetroSight (a minute or two)..."
   if ! python3 -m venv .venv; then
     echo "Python's venv module is missing. Ubuntu/Debian: sudo apt install python3-venv"
     exit 1
@@ -44,14 +44,14 @@ fi
 # The phone's aim reaches games through a virtual light gun device (/dev/uinput)
 if [ ! -w /dev/uinput ]; then
   echo
-  echo "PhoneBlaster needs permission to create its virtual light gun (/dev/uinput)."
+  echo "RetroSight needs permission to create its virtual light gun (/dev/uinput)."
   read -r -p "Fix it now? It asks for your password once. [Y/n] " ans
   case "$ans" in
     [nN]*) echo "Skipped - the gun won't be able to aim until this is fixed." ;;
     *)
       echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' \
-        | sudo tee /etc/udev/rules.d/60-phoneblaster-uinput.rules >/dev/null
-      echo uinput | sudo tee /etc/modules-load.d/phoneblaster-uinput.conf >/dev/null
+        | sudo tee /etc/udev/rules.d/60-RetroSight-uinput.rules >/dev/null
+      echo uinput | sudo tee /etc/modules-load.d/RetroSight-uinput.conf >/dev/null
       sudo modprobe uinput
       sudo udevadm control --reload-rules
       sudo udevadm trigger --subsystem-match=misc --action=change
@@ -65,7 +65,7 @@ if [ ! -w /dev/uinput ]; then
   esac
 fi
 
-# Nice to have: lets PhoneBlaster see which emulator is in front and give it focus back after lock-on (X11)
+# Nice to have: lets RetroSight see which emulator is in front and give it focus back after lock-on (X11)
 if ! command -v xdotool >/dev/null 2>&1 && [ -z "$WAYLAND_DISPLAY" ]; then
   echo "Tip: install xdotool for automatic emulator presets (sudo apt install xdotool)."
 fi

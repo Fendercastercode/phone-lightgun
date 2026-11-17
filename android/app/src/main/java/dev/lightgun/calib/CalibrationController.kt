@@ -53,7 +53,7 @@ class CalibrationController(private val send: (JSONObject) -> Unit) {
         if (now - requestSentMs < 2000) return
         if (requestTries >= 4) {
             pendingRequest = null
-            set(State(Phase.FAILED, state.flow, message = "The PC didn't answer - is PhoneBlaster running on it?"))
+            set(State(Phase.FAILED, state.flow, message = "The PC didn't answer - is RetroSight running on it?"))
             return
         }
         requestTries++; requestSentMs = now

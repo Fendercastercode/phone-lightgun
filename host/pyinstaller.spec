@@ -1,13 +1,13 @@
-# PyInstaller build spec for the PhoneBlaster PC host.
+# PyInstaller build spec for the RetroSight PC host.
 #
 # Build with:  pyinstaller pyinstaller.spec
-# Output:      dist/PhoneBlaster/  (onedir build - keeps Qt/PySide6 as separate DLLs/.so
+# Output:      dist/RetroSight/  (onedir build - keeps Qt/PySide6 as separate DLLs/.so
 #              files rather than merging everything into one binary, which matters for
 #              PySide6's LGPL terms: users must be able to replace the Qt libraries, and
 #              that's only straightforward with an onedir layout, not a single fat exe).
 #
 # This file intentionally does NOT embed any ROMs, BIOS files, or emulator cores - none
-# of that ships with PhoneBlaster. See README.md ("Never bundle...") before changing that.
+# of that ships with RetroSight. See README.md ("Never bundle...") before changing that.
 from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
@@ -32,7 +32,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="PhoneBlaster",
+    name="RetroSight",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -48,5 +48,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="PhoneBlaster",
+    name="RetroSight",
 )

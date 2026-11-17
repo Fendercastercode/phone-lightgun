@@ -23,7 +23,7 @@ def _key(name):
     return getattr(e, f"KEY_{name.upper()}")
 
 
-UINPUT_HELP = ("This PC won't let PhoneBlaster create its virtual light gun (/dev/uinput). "
+UINPUT_HELP = ("This PC won't let RetroSight create its virtual light gun (/dev/uinput). "
                "Run ./start-host.sh once - it offers to fix this (it needs your password once), "
                "then log out and back in.")
 

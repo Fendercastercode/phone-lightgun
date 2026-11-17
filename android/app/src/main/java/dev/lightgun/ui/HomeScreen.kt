@@ -264,7 +264,7 @@ fun InvitePopup(gun: GunController, onClose: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("ON THE OTHER PHONE:", style = arcade(12.sp, Neon.Yellow))
-                    Text("1. Install and open PhoneBlaster\n2. Tap JOIN A FRIEND'S GAME\n   (or PCs > + ADD PC > SCAN QR)\n" +
+                    Text("1. Install and open RetroSight\n2. Tap JOIN A FRIEND'S GAME\n   (or PCs > + ADD PC > SCAN QR)\n" +
                             "3. Scan this code\n4. Point at the TV, press ST to join in",
                         style = arcade(11.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 17.sp))
                     Spacer(Modifier.height(4.dp))

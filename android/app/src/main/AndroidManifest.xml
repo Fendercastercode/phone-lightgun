@@ -17,7 +17,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="PhoneBlaster"
+        android:label="RetroSight"
         android:theme="@style/Theme.LightGun"
         android:usesCleartextTraffic="true">
 

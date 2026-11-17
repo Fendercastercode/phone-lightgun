@@ -1,2 +1,2 @@
-"""Phone Light Gun PC host."""
+"""RetroSight PC host."""
 __version__ = "0.1.0"

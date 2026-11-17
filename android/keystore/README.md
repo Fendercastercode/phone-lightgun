@@ -1,7 +1,8 @@
 # Release keystore - keep this out of git, back it up yourself
 
-This folder holds the **release signing key** for the PhoneBlaster Android app
-(`phoneblaster-release.jks`) and the passwords Gradle needs to use it
+This folder holds the **release signing key** for the RetroSight Android app
+(`phoneblaster-release.jks` - named from before the app was renamed; the file itself
+doesn't need to change) and the passwords Gradle needs to use it
 (`keystore.properties`). Both are gitignored and must stay that way - this
 folder is `.gitignore`d entirely except for this file.
 
@@ -27,9 +28,9 @@ failure above. Keep this local keystore as the upload key either way.
 ## Regenerating (only if starting fresh, before any Play Store upload)
 
 ```bash
-keytool -genkeypair -v -keystore keystore/phoneblaster-release.jks \
-  -alias phoneblaster -keyalg RSA -keysize 4096 -validity 10957 \
-  -dname "CN=PhoneBlaster, OU=PhoneBlaster, O=PhoneBlaster, L=Unknown, ST=Unknown, C=US"
+keytool -genkeypair -v -keystore keystore/retrosight-release.jks \
+  -alias retrosight -keyalg RSA -keysize 4096 -validity 10957 \
+  -dname "CN=RetroSight, OU=RetroSight, O=RetroSight, L=Unknown, ST=Unknown, C=US"
 ```
 
 Then write matching `storeFile`, `storePassword`, `keyAlias`, `keyPassword`

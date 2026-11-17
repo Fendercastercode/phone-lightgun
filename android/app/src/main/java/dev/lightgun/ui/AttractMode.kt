@@ -709,7 +709,7 @@ class AttractMode(private val horizon: Float = 0.55f) {
         }
     }
 
-    /** Drawn above the dimming scrim: the PhoneBlaster logo zooms in during every 1987 stretch. */
+    /** Drawn above the dimming scrim: the RetroSight logo zooms in during every 1987 stretch. */
     fun drawOverlay(ds: DrawScope) = with(ds) {
         if (t < 8f || era != 0) return@with           // not over the start-up splash
         val lt = eraT
@@ -717,7 +717,7 @@ class AttractMode(private val horizon: Float = 0.55f) {
         val zoom = if (lt < 0.35f) 1f + 2f * (1f - lt / 0.35f).let { it * it } else 1f
         val a = (lt / 0.2f).coerceIn(0f, 1f) * ((ERA_SECONDS - 0.2f - lt) / 0.4f).coerceIn(0f, 1f)
         val shine = ((lt - 0.4f) / 1.3f).let { if (it in 0f..1.1f) it else -1f }
-        drawPhoneBlasterLogo(Offset(size.width * 0.7f, size.height * 0.2f), size.width * 0.5f * zoom, shine, a * 0.95f, subtitle = false)
+        drawRetroSightLogo(Offset(size.width * 0.7f, size.height * 0.2f), size.width * 0.5f * zoom, shine, a * 0.95f, subtitle = false)
     }
 
     private fun DrawScope.drawCrosshair(c: Crosshair, w: Float, h: Float) {

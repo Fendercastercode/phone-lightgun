@@ -4,7 +4,8 @@ the native Qt controls. Skin only - no animation, that's for the phone screen.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication
 
 NIGHT = "#0D0221"
@@ -112,3 +113,26 @@ def apply_theme(app: QApplication) -> None:
     font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
     app.setFont(font)
     app.setStyleSheet(_STYLESHEET)
+
+
+def make_crosshair_icon(size: int = 64) -> QIcon:
+    """RetroSight's mark: a reticle, drawn at runtime so no image asset needs bundling."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    c = size / 2
+    r = size * 0.34
+    pen = QPen(QColor(RED))
+    pen.setWidthF(size * 0.09)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawEllipse(QRectF(c - r, c - r, 2 * r, 2 * r))
+    gap = size * 0.14
+    tick = size * 0.16
+    for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+        x0, y0 = c + dx * (r + gap - tick), c + dy * (r + gap - tick)
+        x1, y1 = c + dx * (r + gap), c + dy * (r + gap)
+        p.drawLine(int(x0), int(y0), int(x1), int(y1))
+    p.end()
+    return QIcon(pm)

@@ -1,6 +1,6 @@
 name: Release host build
 
-# Fires on a version tag (v1.2.3). Builds the PhoneBlaster host with PyInstaller for
+# Fires on a version tag (v1.2.3). Builds the RetroSight host with PyInstaller for
 # Windows, Linux (x86_64), and 64-bit Raspberry Pi OS (aarch64), packages each, writes a
 # SHA256SUMS.txt, and attaches everything to a GitHub Release - along with a signed
 # build-provenance attestation (via GitHub's own Sigstore-backed attestation service)
@@ -55,7 +55,7 @@ jobs:
         working-directory: host
         run: pyinstaller pyinstaller.spec
 
-      # - name: Sign PhoneBlaster.exe
+      # - name: Sign RetroSight.exe
       #   # Uncomment once a signing path is set up (SignPath free-for-OSS, or Azure
       #   # Trusted Signing). Never add raw certificate files/passwords as repo secrets
       #   # here - both of those services sign via a short-lived token/OIDC flow instead.
@@ -63,24 +63,24 @@ jobs:
 
       - name: Package release zip
         working-directory: host/dist
-        run: Compress-Archive -Path PhoneBlaster -DestinationPath PhoneBlaster-windows-${{ github.ref_name }}.zip
+        run: Compress-Archive -Path RetroSight -DestinationPath RetroSight-windows-${{ github.ref_name }}.zip
 
       - name: Write checksum
         working-directory: host/dist
         run: |
-          $hash = Get-FileHash PhoneBlaster-windows-${{ github.ref_name }}.zip -Algorithm SHA256
-          "$($hash.Hash.ToLower())  PhoneBlaster-windows-${{ github.ref_name }}.zip" | Out-File -Encoding ascii SHA256SUMS.txt
+          $hash = Get-FileHash RetroSight-windows-${{ github.ref_name }}.zip -Algorithm SHA256
+          "$($hash.Hash.ToLower())  RetroSight-windows-${{ github.ref_name }}.zip" | Out-File -Encoding ascii SHA256SUMS.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: "host/dist/PhoneBlaster-windows-${{ github.ref_name }}.zip"
+          subject-path: "host/dist/RetroSight-windows-${{ github.ref_name }}.zip"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            host/dist/PhoneBlaster-windows-${{ github.ref_name }}.zip
+            host/dist/RetroSight-windows-${{ github.ref_name }}.zip
             host/dist/SHA256SUMS.txt
           generate_release_notes: true
 
@@ -131,24 +131,24 @@ jobs:
         working-directory: host
         run: |
           mkdir -p pkg
-          cp -r dist/PhoneBlaster pkg/
+          cp -r dist/RetroSight pkg/
           cp install-linux.sh pkg/
-          chmod +x pkg/install-linux.sh pkg/PhoneBlaster/PhoneBlaster
-          tar -C pkg -czf dist/PhoneBlaster-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz PhoneBlaster install-linux.sh
+          chmod +x pkg/install-linux.sh pkg/RetroSight/RetroSight
+          tar -C pkg -czf dist/RetroSight-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz RetroSight install-linux.sh
 
       - name: Write checksum
         working-directory: host/dist
-        run: sha256sum PhoneBlaster-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz > SHA256SUMS-${{ matrix.arch }}.txt
+        run: sha256sum RetroSight-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz > SHA256SUMS-${{ matrix.arch }}.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: "host/dist/PhoneBlaster-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz"
+          subject-path: "host/dist/RetroSight-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            host/dist/PhoneBlaster-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
+            host/dist/RetroSight-linux-${{ matrix.arch }}-${{ github.ref_name }}.tar.gz
             host/dist/SHA256SUMS-${{ matrix.arch }}.txt
           generate_release_notes: true

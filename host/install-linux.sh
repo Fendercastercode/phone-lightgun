@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Run once after extracting the PhoneBlaster-linux-*.tar.gz release (or just double-click
-# PhoneBlaster/PhoneBlaster after this has run once). Unlike start-host.sh, this does NOT
-# build a Python venv or compile anything - PhoneBlaster is already a frozen binary here.
+# Run once after extracting the RetroSight-linux-*.tar.gz release (or just double-click
+# RetroSight/RetroSight after this has run once). Unlike start-host.sh, this does NOT
+# build a Python venv or compile anything - RetroSight is already a frozen binary here.
 # This script only does the one-time system setup: /dev/uinput access, and a couple of tips.
 set -e
 cd "$(dirname "$0")"
 
-if [ ! -x PhoneBlaster/PhoneBlaster ]; then
-  echo "PhoneBlaster/PhoneBlaster not found - run this script from inside the extracted release folder."
+if [ ! -x RetroSight/RetroSight ]; then
+  echo "RetroSight/RetroSight not found - run this script from inside the extracted release folder."
   exit 1
 fi
 
@@ -20,24 +20,24 @@ fi
 # The phone's aim reaches games through a virtual light gun device (/dev/uinput)
 if [ ! -w /dev/uinput ]; then
   echo
-  echo "PhoneBlaster needs permission to create its virtual light gun (/dev/uinput)."
+  echo "RetroSight needs permission to create its virtual light gun (/dev/uinput)."
   read -r -p "Fix it now? It asks for your password once. [Y/n] " ans
   case "$ans" in
     [nN]*) echo "Skipped - the gun won't be able to aim until this is fixed." ;;
     *)
       echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' \
-        | sudo tee /etc/udev/rules.d/60-phoneblaster-uinput.rules >/dev/null
-      echo uinput | sudo tee /etc/modules-load.d/phoneblaster-uinput.conf >/dev/null
+        | sudo tee /etc/udev/rules.d/60-RetroSight-uinput.rules >/dev/null
+      echo uinput | sudo tee /etc/modules-load.d/RetroSight-uinput.conf >/dev/null
       sudo modprobe uinput
       sudo udevadm control --reload-rules
       sudo udevadm trigger --subsystem-match=misc --action=change
       sudo usermod -aG input "$USER"
-      echo "Done. (After your next log-in this is permanent - log out/in, or reboot, then run PhoneBlaster/PhoneBlaster.)"
+      echo "Done. (After your next log-in this is permanent - log out/in, or reboot, then run RetroSight/RetroSight.)"
       ;;
   esac
 fi
 
-# Nice to have: lets PhoneBlaster see which emulator is in front and give it focus back after lock-on (X11)
+# Nice to have: lets RetroSight see which emulator is in front and give it focus back after lock-on (X11)
 if ! command -v xdotool >/dev/null 2>&1 && [ -z "$WAYLAND_DISPLAY" ]; then
   echo "Tip: install xdotool for automatic emulator presets (sudo apt install xdotool)."
 fi
@@ -51,4 +51,4 @@ elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 
 fi
 
 echo
-echo "Setup done. Start PhoneBlaster with: ./PhoneBlaster/PhoneBlaster"
+echo "Setup done. Start RetroSight with: ./RetroSight/RetroSight"

@@ -1,5 +1,5 @@
 @echo off
-rem Double-click to start the Phone Light Gun PC host.
+rem Double-click to start the RetroSight PC host.
 cd /d "%~dp0host"
 if not exist ".venv\Scripts\python.exe" (
   echo First run: setting up Python environment...
