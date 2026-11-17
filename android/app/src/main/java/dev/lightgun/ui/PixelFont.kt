@@ -130,9 +130,8 @@ fun DrawScope.drawArcadeText(text: String, topLeft: Offset, px: Float, palette: 
 }
 
 /**
- * A crosshair reticle that fills a whole letter cell in a word drawn by [drawArcadeText] - the
- * same width/height as any other letter, standing in for it entirely rather than sitting as a
- * small decoration on top of it.
+ * A small crosshair reticle centred in the hole of a normally-drawn O, in a word drawn by
+ * [drawArcadeText] - a decoration sitting inside the letter, smaller than it, not replacing it.
  */
 private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Float, letterIndex: Int,
                                            color: Color, alpha: Float) {
@@ -140,24 +139,27 @@ private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Floa
     val cy = (PixelFont.ROWS - 1) / 2f              // centre row
     val lean0 = (PixelFont.ROWS - 1 - cy) * px * lean
     val center = Offset(topLeft.x + cx * px + lean0 + px * 0.5f, topLeft.y + cy * px + px * 0.5f)
-    val rx = px * 2.5f   // half the glyph cell's ~5 px width
-    val ry = px * 3.5f   // half the glyph cell's 7 px height
-    val r = minOf(rx, ry) * 0.72f
-    val sw = px * 0.9f   // as bold as the rest of the lettering
-    drawCircle(color.copy(alpha = alpha), radius = r, center = center, style = Stroke(width = sw))
-    drawLine(color.copy(alpha = alpha), Offset(center.x - rx, center.y), Offset(center.x + rx, center.y), strokeWidth = sw)
-    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y - ry), Offset(center.x, center.y + ry), strokeWidth = sw)
+    val r = px * 0.72f
+    val tickIn = px * 0.39f
+    val tickOut = px * 1.06f
+    val ringWidth = px * 0.28f
+    val tickWidth = px * 0.22f
+    drawCircle(color.copy(alpha = alpha), radius = r, center = center, style = Stroke(width = ringWidth))
+    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y - tickOut), Offset(center.x, center.y - tickIn), strokeWidth = tickWidth)
+    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y + tickIn), Offset(center.x, center.y + tickOut), strokeWidth = tickWidth)
+    drawLine(color.copy(alpha = alpha), Offset(center.x - tickOut, center.y), Offset(center.x - tickIn, center.y), strokeWidth = tickWidth)
+    drawLine(color.copy(alpha = alpha), Offset(center.x + tickIn, center.y), Offset(center.x + tickOut, center.y), strokeWidth = tickWidth)
 }
 
-/** The RetroSight logo: chrome RETR + a full-size crosshair reticle standing in for the O + fire
- *  SIGHT, sized to [width] px, centred at [center]. */
+/** The RetroSight logo: chrome RETRO (a small crosshair sits inside the O's hole) + fire SIGHT,
+ *  sized to [width] px, centred at [center]. */
 fun DrawScope.drawRetroSightLogo(center: Offset, width: Float, shine: Float = -1f, alpha: Float = 1f, subtitle: Boolean = true) {
     val total = PixelFont.width("RETRO") + 3 + PixelFont.width("SIGHT")
     val px = width / (total + PixelFont.ROWS * 0.28f + 2f)
     val h = PixelFont.ROWS * px
     val left = center.x - width / 2f
     val top = center.y - h / 2f - (if (subtitle) px * 2.5f else 0f)
-    drawArcadeText("RETR", Offset(left, top), px, PixelFont.chrome, shine = shine, alpha = alpha,
+    drawArcadeText("RETRO", Offset(left, top), px, PixelFont.chrome, shine = shine, alpha = alpha,
         startColumn = 0, totalColumns = total)
     drawLetterCrosshair(Offset(left, top), px, 0.28f, letterIndex = 4, color = Color(0xFFFF2244), alpha = alpha)
     val zx = left + (PixelFont.width("RETRO") + 3) * px
