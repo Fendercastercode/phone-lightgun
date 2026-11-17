@@ -146,7 +146,15 @@ private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Floa
     val hHalf = px * 1.3f    // horizontal bar stays clear of the O's left/right inner wall
     drawRect(c, Offset(center.x - barThick / 2f, center.y - vHalf), Size(barThick, vHalf * 2f))
     drawRect(c, Offset(center.x - hHalf, center.y - barThick / 2f), Size(hHalf * 2f, barThick))
-    drawCircle(c, radius = px * 1.1f, center = center, style = Stroke(width = px * 0.4f))
+    // A blocky ring (a stroked square, not a smooth circle) so it matches the plus's own
+    // rectangle construction rather than mixing a round shape into a pixel-block letterform.
+    val ringHalf = px * 1.1f
+    val ringThick = px * 0.4f
+    val ringSide = ringHalf * 2f
+    drawRect(c, Offset(center.x - ringHalf, center.y - ringHalf), Size(ringSide, ringThick))
+    drawRect(c, Offset(center.x - ringHalf, center.y + ringHalf - ringThick), Size(ringSide, ringThick))
+    drawRect(c, Offset(center.x - ringHalf, center.y - ringHalf), Size(ringThick, ringSide))
+    drawRect(c, Offset(center.x + ringHalf - ringThick, center.y - ringHalf), Size(ringThick, ringSide))
 }
 
 /** The RetroSight logo: chrome RETRO (a small crosshair sits inside the O's hole) + fire SIGHT,
