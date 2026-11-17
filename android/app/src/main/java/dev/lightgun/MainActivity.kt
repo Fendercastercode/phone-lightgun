@@ -22,6 +22,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import dev.lightgun.input.ButtonMap
 import dev.lightgun.input.GunAction
+import dev.lightgun.net.HostBook
 import dev.lightgun.net.Pairing
 import dev.lightgun.net.Protocol
 import dev.lightgun.ui.LightGunApp
@@ -65,7 +66,12 @@ class MainActivity : ComponentActivity() {
         goImmersive()
         // start on the PC list (pick a calibrated PC or add a new one); first run: guided setup
         route = if (!gun.settings.tutorialDone) Route.TUTORIAL else Route.HOME
-        if (!gun.settings.tutorialDone) gun.settings.pairing?.let { gun.connect(it) }
+        // Only auto-reconnect to a pc that's still actually in the saved list - otherwise a
+        // forgotten pc (which clears hostId but can't un-set this legacy single-pairing field
+        // retroactively) would just come right back on the next cold launch.
+        if (!gun.settings.tutorialDone) gun.settings.pairing?.let { p ->
+            if (gun.settings.hosts.get(HostBook.idOf(p)) != null) gun.connect(p)
+        }
         setContent {
             LightGunApp(gun, route, onNavigate = { route = it; onRouteChanged(it) }, onScanQr = ::scanQr,
                 onUseHost = { h ->

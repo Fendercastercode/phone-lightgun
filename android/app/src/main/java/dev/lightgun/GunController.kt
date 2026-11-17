@@ -217,11 +217,14 @@ class GunController private constructor(private val app: Context) : SensorEventL
         private set
 
     /** Tears down the live link to the PC (if any) and lets it know, so its status clears right
-     *  away instead of just going quiet for a few seconds. */
+     *  away instead of just going quiet for a few seconds. Also drops the legacy single-pairing
+     *  field `connect()` keeps updated - otherwise a restart (which auto-reconnects using that
+     *  field before any pc is picked) would silently re-pair with the pc that was just forgotten. */
     fun disconnect() {
         link?.sendCtrl(JSONObject().put("type", "bye"))
         link?.close(); link = null
         hostId = null
+        settings.pairing = null
     }
 
     /** Start tracking + streaming (Calibrate/Play screens). Camera permission must be granted. */
