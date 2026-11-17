@@ -87,13 +87,13 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
 
     Stage("connect", "Connect to PC", "CONNECT TO YOUR PC", Neon.Cyan,
         "The phone needs to talk to a small program on your PC.",
-        listOf("On the PC, open the phone-lightgun folder and double-click start-host.bat.",
+        listOf("On the PC, open the RetroSight folder and double-click start-host.bat.",
             "In the window that opens, click SHOW PAIRING QR. A big square code appears on your TV.",
             "Tap SCAN QR and point the phone's camera at that code."),
         Art.PAIR, need = Need.REQUIRED, success = "This step turns green and the PC window says \"Paired\".",
         stuck = listOf("Windows asked about the firewall? Choose ALLOW (private networks).",
             "Phone and PC must be on the same Wi-Fi network.",
-            "No start-host.bat? In a terminal run:  cd /d D:\\AsIf\\phone-lightgun\\host  then  .venv\\Scripts\\python -m lightgun_host"),
+            "No start-host.bat? In the RetroSight folder, in a terminal run:  cd host  then  .venv\\Scripts\\python -m lightgun_host"),
         waiting = "Waiting for the PC to answer...", action = "\u25B6 SCAN QR" to { _ -> onScanQr() }, skippable = false,
         live = { g -> g.link?.connected == true }, done = { g, _ -> g.link?.connected == true }),
 
@@ -187,7 +187,7 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
             "RetroArch: Settings > Drivers > Input = raw; run the game full screen on the same monitor.",
             "Set Port 1 to the gun: Zapper (NES), GunCon (PS1), Menacer/Justifier (Genesis). Then tap PLAY!"),
         Art.GAME, success = "Shots land where you aim in the game.",
-        stuck = listOf("Other emulators: see host/presets.md in the phone-lightgun folder on your PC."),
+        stuck = listOf("Other emulators: see host/presets.md in the RetroSight folder on your PC."),
         waiting = "Tap PLAY!", action = "\u25B6 PLAY!" to { _ -> }, skippable = false, done = { _, _ -> false }),
 )
 
