@@ -107,8 +107,10 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
     Stage("camera", "Camera check", "CAMERA CHECK", Neon.Lime,
         "The gun keeps track of itself by locking onto anchor points in the room - furniture edges, patterns on the floor. It doesn't use the TV for this.",
         listOf("Point the BACK of the phone at the floor, a rug or furniture.",
-            "Hold still for a second while the meter fills up."),
-        Art.FLOOR, need = Need.REQUIRED, pane = Pane.CAMERA, success = "The meter is full and it says LOCKED ONTO THE ROOM.",
+            "Hold the phone the way you actually plan to hold it while playing.",
+            "Once it says LOCKED ON, tap ANCHOR - then check the picture of what got anchored."),
+        Art.FLOOR, need = Need.REQUIRED, pane = Pane.CAMERA,
+        success = "You've tapped ANCHOR and seen the picture of what it locked onto.",
         stuck = listOf("Turn on a light - in a dark room the camera can't see any anchor points.",
             "Plain white walls and ceilings have no anchor points. Aim at the floor, a rug, a shelf or furniture.",
             "Wipe the camera lens.",
@@ -249,23 +251,24 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     // the player having to remove their PC as a workaround to force a fresh walkthrough.
     fun restart() { gun.resetTutorial(); doneOnce = emptySet(); go(0) }
 
+    // Camera check doesn't auto-advance on tracking alone: the player must actually look at the
+    // picture of what got anchored and tap ANCHOR themselves. Otherwise it's too easy to clear
+    // this step on whatever the camera happened to already see, without ever deciding "yes, this
+    // is the anchor I want". Reset whenever the stage is (re)entered.
+    var cameraConfirmed by remember(index) { mutableStateOf(false) }
+
     // Poll the completion condition; on success flash STAGE CLEAR, click, advance.
     LaunchedEffect(index) {
         val a = gun.aim
         val base = Baseline(a.shots, a.offscreenReloads, a.flicks, a.recenters, gun.calib.resultSeq)
         cleared = false
-        var since = 0L
-        // Camera check lingers longer than other auto-clearing steps: it's easy to already be
-        // tracking well when this step opens, and the player should actually see the picture of
-        // what it locked onto, not have the step blink past before they notice it ran at all.
-        val holdMs = if (stage.pane == Pane.CAMERA) 2500L else 0L
         while (true) {
-            if (stage.done(gun, base)) {
-                if (since == 0L) since = System.currentTimeMillis()
-                if (System.currentTimeMillis() - since >= holdMs) break
-            } else since = 0L
+            val ready = stage.done(gun, base) && (stage.pane != Pane.CAMERA || cameraConfirmed)
+            if (ready) break
             delay(100)
         }
+        // Let the player actually see the anchored picture before STAGE CLEAR covers the screen.
+        if (stage.pane == Pane.CAMERA) delay(1800)
         markDone(stage.id)
         cleared = true
         gun.haptics.reload()
@@ -333,7 +336,8 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                     when {
                         stage.pane == Pane.COACH && coach.active ->
                             ScanCoachView(coach, cal.progress.toFloat(), Modifier.fillMaxSize().background(Color(0xFF0A0118)).padding(6.dp))
-                        stage.pane == Pane.CAMERA -> CameraMeter(gun, aim, camThumb, Modifier.fillMaxSize())
+                        stage.pane == Pane.CAMERA -> CameraMeter(gun, aim, camThumb, cameraConfirmed,
+                            { cameraConfirmed = true }, Modifier.fillMaxSize())
                         stage.pane == Pane.FIRE -> Column(Modifier.fillMaxSize()) {
                             TutorialArt(stage.art, Modifier.weight(1f).fillMaxWidth())
                             ArcadeZone("FIRE!", "OR PRESS VOLUME DOWN", Neon.Red, Modifier.weight(1f).fillMaxWidth(),
@@ -434,26 +438,46 @@ private fun StatusBar(stage: Stage, cal: CalibrationController.State, cleared: B
     }
 }
 
+/**
+ * Big and simple on purpose: this is read at arm's length with the phone held sideways like a
+ * gun, not studied up close. Before [onConfirm] is tapped it's just a status word and a big
+ * ANCHOR button - no picture yet, so there's nothing small to squint at while getting lined up.
+ * Only after tapping ANCHOR does it show the actual picture of what got anchored.
+ */
 @Composable
-private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, modifier: Modifier) {
+private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, confirmed: Boolean,
+                        onConfirm: () -> Unit, modifier: Modifier) {
     val locked = aim.tracking && aim.features >= 40
     var showSave by remember { mutableStateOf(false) }
     val saved = remember(showSave) { gun.savedLocation() }   // re-read right after a save closes the popup
-    Column(modifier.background(Color(0xFF0A0118)).bevel(Neon.Dim, 2.dp).padding(12.dp),
+    Column(modifier.background(Color(0xFF0A0118)).bevel(Neon.Dim, 2.dp).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        // This IS the live picture the camera is using - not an illustration - so the player can
-        // see exactly what it locked onto, not just trust a progress bar.
-        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-            if (thumb != null) Image(thumb.asImageBitmap(), "what the camera is tracking",
-                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-            else TutorialArt(Art.FLOOR, Modifier.fillMaxSize())
+        if (!confirmed) {
+            Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (locked) "LOCKED ON" else if (aim.tracking) "SEARCHING..." else "NOT TRACKING",
+                        style = arcade(28.sp, if (locked) Neon.Lime else Neon.Orange, glow = if (locked) Neon.Lime else null))
+                    // A clear, specific reason it's NOT good yet - not just a silent/stuck meter.
+                    if (!locked) Text(
+                        if (!aim.tracking) "CAMERA LOST THE ROOM" + (aim.failure?.let { " (${it.replace('_', ' ').lowercase()})" } ?: "")
+                        else "ONLY ${aim.features} ANCHOR POINTS - NEEDS 40. KEEP IT POINTED AT SOMETHING WITH DETAIL.",
+                        style = body(12.sp, Neon.Orange), modifier = Modifier.padding(top = 4.dp))
+                    Spacer(Modifier.height(10.dp))
+                    SegmentBar((aim.features / 40f).coerceIn(0f, 1f), Modifier.fillMaxWidth(), segments = 20)
+                }
+            }
+            if (locked) ArcadeButton("ANCHOR", onConfirm, color = Neon.Lime)
+            else Text("HOLD THE PHONE HOW YOU WANT IT WHILE YOU WAIT", style = body(12.sp, Neon.Dim))
+        } else {
+            Text("ANCHORED", style = arcade(24.sp, Neon.Lime, glow = Neon.Lime))
+            Spacer(Modifier.height(6.dp))
+            Text("THIS IS WHAT IT'S TRACKING:", style = body(11.sp, Neon.Dim))
+            Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+                if (thumb != null) Image(thumb.asImageBitmap(), "what the camera is tracking",
+                    Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            }
+            if (thumb != null) ArcadeButton("SAVE THIS LOCATION", { showSave = true }, small = true, color = Neon.Cyan)
         }
-        Text("ANCHOR POINTS: ${aim.features}", style = arcade(18.sp, if (aim.features >= 40) Neon.Lime else Neon.Orange))
-        SegmentBar((aim.features / 40f).coerceIn(0f, 1f), Modifier.fillMaxWidth().padding(vertical = 6.dp))
-        Text(if (aim.tracking) "LOCKED ONTO THE ROOM" else "SEARCHING... (${aim.failure?.replace('_', ' ')?.lowercase() ?: "point at the room"})",
-            style = body(13.sp, if (aim.tracking) Neon.Cyan else Neon.Orange))
-        if (locked && thumb != null)
-            ArcadeButton("SAVE THIS LOCATION", { showSave = true }, small = true, color = Neon.Cyan)
         saved?.let { (name, savedThumb) ->
             Spacer(Modifier.height(6.dp))
             Text(if (name.isNotEmpty()) "LAST TIME: \"${name.uppercase()}\"" else "A SAVED LOCATION IS ON FILE",
