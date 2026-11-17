@@ -130,8 +130,9 @@ fun DrawScope.drawArcadeText(text: String, topLeft: Offset, px: Float, palette: 
 }
 
 /**
- * A small crosshair reticle centred in the hole of a normally-drawn O, in a word drawn by
- * [drawArcadeText] - a decoration sitting inside the letter, smaller than it, not replacing it.
+ * A crosshair in the hole of a normally-drawn O, in a word drawn by [drawArcadeText] - the plus
+ * is blocky rectangles, matching the letters' own construction, with a thin ring around it. Sized
+ * to fill most of the O's hollow centre, not a tiny decoration lost inside it.
  */
 private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Float, letterIndex: Int,
                                            color: Color, alpha: Float) {
@@ -139,16 +140,13 @@ private fun DrawScope.drawLetterCrosshair(topLeft: Offset, px: Float, lean: Floa
     val cy = (PixelFont.ROWS - 1) / 2f              // centre row
     val lean0 = (PixelFont.ROWS - 1 - cy) * px * lean
     val center = Offset(topLeft.x + cx * px + lean0 + px * 0.5f, topLeft.y + cy * px + px * 0.5f)
-    val r = px * 0.72f
-    val tickIn = px * 0.39f
-    val tickOut = px * 1.06f
-    val ringWidth = px * 0.28f
-    val tickWidth = px * 0.22f
-    drawCircle(color.copy(alpha = alpha), radius = r, center = center, style = Stroke(width = ringWidth))
-    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y - tickOut), Offset(center.x, center.y - tickIn), strokeWidth = tickWidth)
-    drawLine(color.copy(alpha = alpha), Offset(center.x, center.y + tickIn), Offset(center.x, center.y + tickOut), strokeWidth = tickWidth)
-    drawLine(color.copy(alpha = alpha), Offset(center.x - tickOut, center.y), Offset(center.x - tickIn, center.y), strokeWidth = tickWidth)
-    drawLine(color.copy(alpha = alpha), Offset(center.x + tickIn, center.y), Offset(center.x + tickOut, center.y), strokeWidth = tickWidth)
+    val c = color.copy(alpha = alpha)
+    val barThick = px * 0.42f
+    val vHalf = px * 2.0f    // vertical bar reaches close to the O's top/bottom inner wall
+    val hHalf = px * 1.3f    // horizontal bar stays clear of the O's left/right inner wall
+    drawRect(c, Offset(center.x - barThick / 2f, center.y - vHalf), Size(barThick, vHalf * 2f))
+    drawRect(c, Offset(center.x - hHalf, center.y - barThick / 2f), Size(hHalf * 2f, barThick))
+    drawCircle(c, radius = px * 1.1f, center = center, style = Stroke(width = px * 0.4f))
 }
 
 /** The RetroSight logo: chrome RETRO (a small crosshair sits inside the O's hole) + fire SIGHT,
