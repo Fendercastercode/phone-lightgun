@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -59,14 +60,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.lightgun.ButtonRect
+import kotlin.math.roundToInt
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** 90s arcade palette. */
@@ -249,17 +256,21 @@ fun SegmentBar(fraction: Float, modifier: Modifier = Modifier, segments: Int = 1
     }
 }
 
-/** Big press/release arcade zone with hit flash. */
+/**
+ * Big press/release arcade zone with hit flash. [interactive] = false drops the press/long-press
+ * gesture entirely (used while the zone is being dragged/resized in the Play layout editor, so it
+ * doesn't also fire as a button).
+ */
 @Composable
 fun ArcadeZone(label: String, sub: String, color: Color, modifier: Modifier, onPress: (Boolean) -> Unit,
-               onLongPress: (() -> Unit)? = null) {
+               onLongPress: (() -> Unit)? = null, interactive: Boolean = true) {
     var down by remember { mutableStateOf(false) }
     val press by rememberUpdatedState(onPress)
     val longPress by rememberUpdatedState(onLongPress)
     Box(modifier.padding(6.dp)
         .background(if (down) color.copy(alpha = 0.6f) else Neon.Night.copy(alpha = 0.85f))
         .bevel(color, 4.dp, down)
-        .pointerInput(Unit) {
+        .then(if (!interactive) Modifier else Modifier.pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
                 down = true; press(true)
@@ -270,11 +281,65 @@ fun ArcadeZone(label: String, sub: String, color: Color, modifier: Modifier, onP
                 } else waitForUpOrCancellation()
                 down = false; press(false)
             }
-        }, contentAlignment = Alignment.Center) {
+        }), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (label.isNotEmpty()) Text(label, style = arcade(if (label.length > 6) 20.sp else 28.sp,
                 if (down) Neon.Night else color, glow = if (down) null else color))
             if (sub.isNotEmpty()) Text(sub, style = arcade(10.sp, if (down) Neon.Night else Neon.Dim))
+        }
+    }
+}
+
+/**
+ * Root for a screen whose [MovableZone]s are positioned as fractions of this box, in pixels
+ * supplied to [content] once measured.
+ */
+@Composable
+fun EditableLayout(modifier: Modifier = Modifier, content: @Composable BoxScope.(IntSize) -> Unit) {
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    Box(modifier.onSizeChanged { size = it }) {
+        if (size != IntSize.Zero) content(size)
+    }
+}
+
+/**
+ * A zone positioned/sized by [rect] (fractions of [container], in px). In [editMode] it can be
+ * dragged by its body and resized from the handle in its bottom-right corner; [onRectChange]
+ * reports the new rect on every move so the caller can persist it. Outside edit mode this is
+ * just a positioned [content] - presses still reach it normally.
+ */
+@Composable
+fun BoxScope.MovableZone(id: String, rect: ButtonRect, container: IntSize, editMode: Boolean,
+                          minFraction: Float = 0.08f, onRectChange: (String, ButtonRect) -> Unit,
+                          content: @Composable (Modifier) -> Unit) {
+    val latest by rememberUpdatedState(rect)
+    Box(Modifier
+        .offset { IntOffset((rect.x * container.width).roundToInt(), (rect.y * container.height).roundToInt()) }
+        .size(with(LocalDensity.current) { (rect.w * container.width).toDp() },
+              with(LocalDensity.current) { (rect.h * container.height).toDp() })) {
+        content(Modifier.fillMaxSize().then(if (!editMode) Modifier else Modifier
+            .border(2.dp, Neon.White.copy(alpha = 0.7f))
+            .pointerInput(id) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    val r = latest
+                    val nx = (r.x + drag.x / container.width).coerceIn(0f, 1f - r.w)
+                    val ny = (r.y + drag.y / container.height).coerceIn(0f, 1f - r.h)
+                    onRectChange(id, r.copy(x = nx, y = ny))
+                }
+            }))
+        if (editMode) {
+            Box(Modifier.align(Alignment.BottomEnd).size(30.dp)
+                .background(Neon.Yellow.copy(alpha = 0.85f))
+                .pointerInput(id) {
+                    detectDragGestures { change, drag ->
+                        change.consume()
+                        val r = latest
+                        val nw = (r.w + drag.x / container.width).coerceIn(minFraction, 1f - r.x)
+                        val nh = (r.h + drag.y / container.height).coerceIn(minFraction, 1f - r.y)
+                        onRectChange(id, r.copy(w = nw, h = nh))
+                    }
+                })
         }
     }
 }

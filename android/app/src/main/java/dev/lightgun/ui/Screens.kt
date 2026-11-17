@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -40,10 +42,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import dev.lightgun.AimState
+import dev.lightgun.ButtonRect
 import dev.lightgun.GunController
 import dev.lightgun.calib.CalibrationController
 import dev.lightgun.calib.CalibrationController.Phase
@@ -283,6 +289,29 @@ private fun CalibrateScreen(gun: GunController, cal: CalibrationController.State
 
 // ------------------------------------------------------------------------------ Play
 
+/**
+ * Starting position/size for each Play-screen button, as fractions of the whole screen, matching
+ * the look of the old fixed Row/Column layout. [gun.settings.playLayout] overrides any of these
+ * once the player drags or resizes a zone; this is only the layout before that ever happens.
+ */
+private fun defaultPlayLayout(triggerOnRight: Boolean): Map<String, ButtonRect> {
+    val tw = 1.4f / 3.35f; val hw = 0.95f / 3.35f; val rw = 1f / 3.35f
+    val triggerX = if (triggerOnRight) rw + hw else 0f
+    val reloadX = if (triggerOnRight) 0f else tw + hw
+    val hudX = if (triggerOnRight) rw else tw
+    val topH = 2f / 3f
+    val aw = rw * (1f / 4.4f); val cw = rw * (1.2f / 4.4f)
+    return mapOf(
+        "fire" to ButtonRect(triggerX, 0f, tw, 1f),
+        "hud" to ButtonRect(hudX, 0f, hw, 1f),
+        "reload" to ButtonRect(reloadX, 0f, rw, topH),
+        "a" to ButtonRect(reloadX, topH, aw, 1f - topH),
+        "b" to ButtonRect(reloadX + aw, topH, aw, 1f - topH),
+        "coin" to ButtonRect(reloadX + 2 * aw, topH, cw, 1f - topH),
+        "start" to ButtonRect(reloadX + 2 * aw + cw, topH, cw, 1f - topH),
+    )
+}
+
 @Composable
 private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationController.State, onNavigate: (Route) -> Unit) {
     DisposableEffect(Unit) { gun.playing = true; onDispose { gun.playing = false; gun.endTrim() } }
@@ -321,36 +350,55 @@ private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationContro
         }
     }
     val right = gun.settings.triggerOnRight
-    val trigger: @Composable (Modifier) -> Unit = { m ->
-        ArcadeZone("FIRE!", "SHOOT OFF-SCREEN = RELOAD", Neon.Red, m, { gun.setButton(Protocol.BTN_TRIGGER, it) })
-    }
     // what each pad does in the emulator in front (sent by the PC), e.g. A = "BUTTON 2" in MAME
     val labels = gun.emuStatus?.takeIf { System.currentTimeMillis() - it.atMs < 10_000 }?.labels ?: emptyMap()
-    val reload: @Composable (Modifier) -> Unit = { m ->
-        Column(m) {
-            ArcadeZone("RELOAD", labels["reload"]?.let { "= $it" } ?: "OR FLICK THE GUN", Neon.Cyan, Modifier.weight(2f).fillMaxWidth(),
-                { gun.setButton(Protocol.BTN_RELOAD, it) })
-            Row(Modifier.weight(1f)) {
-                ArcadeZone("A", labels["a"] ?: "", Neon.Lime, Modifier.weight(1f).fillMaxHeight(), { gun.setButton(Protocol.BTN_A, it) })
-                ArcadeZone("B", labels["b"] ?: "", Neon.Yellow, Modifier.weight(1f).fillMaxHeight(), { gun.setButton(Protocol.BTN_B, it) })
-                ArcadeZone("COIN", labels["select"] ?: "SELECT", Neon.Orange, Modifier.weight(1.2f).fillMaxHeight(), { gun.setButton(Protocol.BTN_SELECT, it) })
-                ArcadeZone("ST", labels["start"] ?: "START", Neon.Magenta, Modifier.weight(1.2f).fillMaxHeight(), { gun.setButton(Protocol.BTN_START, it) })
-            }
-        }
-    }
     var showEmu by remember { mutableStateOf(false) }
     var showNet by remember { mutableStateOf(false) }
     var showInvite by remember { mutableStateOf(false) }
+    var editLayout by remember { mutableStateOf(false) }
+    var layout by remember { mutableStateOf(gun.settings.playLayout) }
+    fun setRect(id: String, r: ButtonRect) {
+        layout = layout + (id to r)
+        gun.settings.playLayout = layout
+    }
+    val defaults = defaultPlayLayout(right)
     Box(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxSize()) {
-            if (right) reload(Modifier.weight(1f).fillMaxHeight()) else trigger(Modifier.weight(1.4f).fillMaxHeight())
-            // middle: HUD; long-press = recenter
-            Box(Modifier.weight(0.95f).fillMaxHeight()) {
-                ArcadeZone("", "", Neon.Dim.copy(alpha = 0.5f), Modifier.fillMaxSize(), {}, onLongPress = { gun.recenter() })
-                Hud(gun, aim, cal, onNavigate, onEmu = { showEmu = true }, onInvite = { showInvite = true },
-                    onNet = { showNet = true })
+        EditableLayout(Modifier.fillMaxSize()) { container ->
+            MovableZone("fire", layout["fire"] ?: defaults["fire"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("FIRE!", "SHOOT OFF-SCREEN = RELOAD", Neon.Red, m,
+                    { gun.setButton(Protocol.BTN_TRIGGER, it) }, interactive = !editLayout)
             }
-            if (right) trigger(Modifier.weight(1.4f).fillMaxHeight()) else reload(Modifier.weight(1f).fillMaxHeight())
+            MovableZone("reload", layout["reload"] ?: defaults["reload"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("RELOAD", labels["reload"]?.let { "= $it" } ?: "OR FLICK THE GUN", Neon.Cyan, m,
+                    { gun.setButton(Protocol.BTN_RELOAD, it) }, interactive = !editLayout)
+            }
+            MovableZone("a", layout["a"] ?: defaults["a"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("A", labels["a"] ?: "", Neon.Lime, m, { gun.setButton(Protocol.BTN_A, it) }, interactive = !editLayout)
+            }
+            MovableZone("b", layout["b"] ?: defaults["b"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("B", labels["b"] ?: "", Neon.Yellow, m, { gun.setButton(Protocol.BTN_B, it) }, interactive = !editLayout)
+            }
+            MovableZone("coin", layout["coin"] ?: defaults["coin"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("COIN", labels["select"] ?: "SELECT", Neon.Orange, m,
+                    { gun.setButton(Protocol.BTN_SELECT, it) }, interactive = !editLayout)
+            }
+            MovableZone("start", layout["start"] ?: defaults["start"]!!, container, editLayout, onRectChange = ::setRect) { m ->
+                ArcadeZone("ST", labels["start"] ?: "START", Neon.Magenta, m,
+                    { gun.setButton(Protocol.BTN_START, it) }, interactive = !editLayout)
+            }
+            // middle: HUD, fixed in place (not a button, so not part of the movable layout); long-press = recenter
+            val hud = defaults["hud"]!!
+            Box(Modifier
+                .offset { IntOffset((hud.x * container.width).roundToInt(), (hud.y * container.height).roundToInt()) }
+                .size(with(LocalDensity.current) { (hud.w * container.width).toDp() },
+                      with(LocalDensity.current) { (hud.h * container.height).toDp() })) {
+                ArcadeZone("", "", Neon.Dim.copy(alpha = 0.5f), Modifier.fillMaxSize(), {},
+                    onLongPress = { gun.recenter() }, interactive = !editLayout)
+                Hud(gun, aim, cal, onNavigate, onEmu = { showEmu = true }, onInvite = { showInvite = true },
+                    onNet = { showNet = true }, editLayout = editLayout,
+                    onToggleEditLayout = { editLayout = !editLayout },
+                    onResetLayout = { layout = emptyMap(); gun.settings.playLayout = emptyMap() })
+            }
         }
         // buttons still reach the PC while this is open, so it doubles as a button test
         if (showEmu) EmuPopup(gun) { showEmu = false }
@@ -456,7 +504,8 @@ private fun EmuPopup(gun: GunController, onClose: () -> Unit) {
 
 @Composable
 private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.State, onNavigate: (Route) -> Unit,
-                onEmu: () -> Unit, onInvite: () -> Unit, onNet: () -> Unit) {
+                onEmu: () -> Unit, onInvite: () -> Unit, onNet: () -> Unit, editLayout: Boolean,
+                onToggleEditLayout: () -> Unit, onResetLayout: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -513,12 +562,23 @@ private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.St
             if (aim.lastEvent.isNotEmpty()) Text(aim.lastEvent.uppercase(), style = arcade(9.sp, Neon.Cyan, weight = FontWeight.Bold))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("BATT ${aim.battery}%  ${aim.rateHz.toInt()}HZ  ${if (aim.rttMs >= 0) "%.0fMS".format(aim.rttMs / 2) else "--"}",
-                style = arcade(9.sp, Neon.Dim))
-            Text("HOLD HERE = RECENTER", style = arcade(9.sp, Neon.Dim))
+            if (editLayout) {
+                Text("DRAG A BUTTON TO MOVE IT", style = arcade(10.sp, Neon.Yellow, glow = Neon.Yellow))
+                Text("DRAG ITS YELLOW CORNER TO RESIZE", style = arcade(9.sp, Neon.Dim))
+            } else {
+                Text("BATT ${aim.battery}%  ${aim.rateHz.toInt()}HZ  ${if (aim.rttMs >= 0) "%.0fMS".format(aim.rttMs / 2) else "--"}",
+                    style = arcade(9.sp, Neon.Dim))
+                Text("HOLD HERE = RECENTER", style = arcade(9.sp, Neon.Dim))
+            }
             Row {
-                ArcadeButton("MENU", { onNavigate(Route.CALIBRATE) }, small = true, color = Neon.Dim)
-                if (gun.player == 1 && aim.connected) ArcadeButton("+P2", onInvite, small = true, color = Neon.Cyan)
+                if (editLayout) {
+                    ArcadeButton("RESET", onResetLayout, small = true, color = Neon.Orange)
+                    ArcadeButton("DONE", onToggleEditLayout, small = true, color = Neon.Lime)
+                } else {
+                    ArcadeButton("MENU", { onNavigate(Route.CALIBRATE) }, small = true, color = Neon.Dim)
+                    ArcadeButton("LAYOUT", onToggleEditLayout, small = true, color = Neon.Dim)
+                    if (gun.player == 1 && aim.connected) ArcadeButton("+P2", onInvite, small = true, color = Neon.Cyan)
+                }
             }
         }
     }

@@ -7,6 +7,15 @@ import org.json.JSONObject
 
 data class GripProfile(val name: String, val barrel: Barrel, val note: String = "")
 
+/** A button's position and size on the Play screen, as fractions (0..1) of the whole screen. */
+data class ButtonRect(val x: Float, val y: Float, val w: Float, val h: Float) {
+    fun toJson(): JSONObject = JSONObject().apply { put("x", x); put("y", y); put("w", w); put("h", h) }
+    companion object {
+        fun fromJson(o: JSONObject) = ButtonRect(o.getDouble("x").toFloat(), o.getDouble("y").toFloat(),
+            o.getDouble("w").toFloat(), o.getDouble("h").toFloat())
+    }
+}
+
 /** SharedPreferences-backed settings and stored calibration. */
 class Settings(context: Context) {
     private val sp = context.getSharedPreferences("lightgun", Context.MODE_PRIVATE)
@@ -93,6 +102,15 @@ class Settings(context: Context) {
     var shotFx: Boolean
         get() = sp.getBoolean("shot_fx", true)
         set(v) = sp.edit().putBoolean("shot_fx", v).apply()
+
+    /** Custom position/size for each Play-screen button, keyed by button id. Missing ids use the default layout. */
+    var playLayout: Map<String, ButtonRect>
+        get() = sp.getString("play_layout", null)?.let { s ->
+            val o = JSONObject(s)
+            o.keys().asSequence().associateWith { k -> ButtonRect.fromJson(o.getJSONObject(k)) }
+        } ?: emptyMap()
+        set(v) = sp.edit().putString("play_layout",
+            JSONObject().apply { v.forEach { (k, r) -> put(k, r.toJson()) } }.toString()).apply()
 
     /** Host display id ("\\.\DISPLAY1:2560x1440") the current calibration belongs to. */
     var lastDisplayId: String?
