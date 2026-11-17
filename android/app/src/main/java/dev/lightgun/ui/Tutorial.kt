@@ -258,6 +258,7 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     // the stage is (re)entered.
     var anchorCaptured by remember(index) { mutableStateOf(false) }
     var cameraConfirmed by remember(index) { mutableStateOf(false) }
+    var capturedThumb by remember(index) { mutableStateOf<Bitmap?>(null) }
 
     // Poll the completion condition; on success flash STAGE CLEAR, click, advance.
     LaunchedEffect(index) {
@@ -265,7 +266,11 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
         val base = Baseline(a.shots, a.offscreenReloads, a.flicks, a.recenters, gun.calib.resultSeq)
         cleared = false
         while (true) {
-            val ready = stage.done(gun, base) && (stage.pane != Pane.CAMERA || cameraConfirmed)
+            // Camera check completes on the explicit YES, TRACK THIS tap alone - tracking only
+            // has to be good enough to let that tap happen (gates the ANCHOR button itself), not
+            // still be live at the exact instant this loop polls afterward. Every other stage
+            // still completes from its own live condition.
+            val ready = if (stage.pane == Pane.CAMERA) cameraConfirmed else stage.done(gun, base)
             if (ready) break
             delay(100)
         }
@@ -280,7 +285,8 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
         Header(list, statuses, index, missing.map { it.short }, onJump = ::go, onExit = ::finish, onRestart = ::restart)
         if (gun.newScreen) WarningBanner("NEW SCREEN (${gun.displayLabel}) - MEASURE YOUR TV AND LOCK ON AGAIN",
             Modifier.padding(horizontal = 10.dp, vertical = 2.dp))
-        Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // ---------------- left: what to do (scrolls) + pinned buttons
             Column(Modifier.weight(1.25f).fillMaxHeight()) {
@@ -336,9 +342,7 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                     when {
                         stage.pane == Pane.COACH && coach.active ->
                             ScanCoachView(coach, cal.progress.toFloat(), Modifier.fillMaxSize().background(Color(0xFF0A0118)).padding(6.dp))
-                        stage.pane == Pane.CAMERA -> CameraMeter(gun, aim, camThumb, anchorCaptured, cameraConfirmed,
-                            onAnchor = { anchorCaptured = true }, onConfirm = { cameraConfirmed = true },
-                            onRetry = { anchorCaptured = false }, Modifier.fillMaxSize())
+                        stage.pane == Pane.CAMERA -> TutorialArt(stage.art, Modifier.fillMaxSize())   // the real thing is the big popup below
                         stage.pane == Pane.FIRE -> Column(Modifier.fillMaxSize()) {
                             TutorialArt(stage.art, Modifier.weight(1f).fillMaxWidth())
                             ArcadeZone("FIRE!", "OR PRESS VOLUME DOWN", Neon.Red, Modifier.weight(1f).fillMaxWidth(),
@@ -360,6 +364,17 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                 }
                 StatusBar(stage, cal, cleared, alreadyDone, Modifier.fillMaxWidth().padding(top = 6.dp))
             }
+        }
+        // The real camera-check UI: a big popup over both columns, not squeezed into the small
+        // right-hand pane - the live picture needs to actually be readable, not a thumbnail.
+        if (stage.pane == Pane.CAMERA) {
+            Box(Modifier.fillMaxSize().background(Neon.Night.copy(alpha = 0.92f)), Alignment.Center) {
+                CameraMeter(gun, aim, camThumb, capturedThumb, anchorCaptured, cameraConfirmed,
+                    onAnchor = { capturedThumb = camThumb; anchorCaptured = true }, onConfirm = { cameraConfirmed = true },
+                    onRetry = { anchorCaptured = false },
+                    Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.92f))
+            }
+        }
         }
     }
 }
@@ -441,56 +456,51 @@ private fun StatusBar(stage: Stage, cal: CalibrationController.State, cleared: B
 
 /**
  * Big and simple on purpose: this is read at arm's length with the phone held sideways like a
- * gun, not studied up close. Three phases, never a timer:
- *  1. Before ANCHOR: the one instruction that actually matters ("HOLD THE PHONE HOW YOU WANT TO
- *     PLAY") stays huge and in the way the whole time, plus a live status - nothing small to
- *     squint at while getting lined up.
- *  2. After ANCHOR: the actual picture of what got anchored, with a real yes/no - RETRY goes
- *     back to step 1 to re-lock and look again.
- *  3. After YES, TRACK THIS: done: [onConfirm] is what the caller polls to advance the stage.
+ * gun, not studied up close. The live camera picture is always on screen (not hidden while
+ * searching - seeing *why* it's not tracking yet, e.g. a dim room, matters). Two explicit taps,
+ * never a timer: ANCHOR freezes the current picture to review; YES, TRACK THIS is what the
+ * caller polls to actually advance the stage. RETRY un-freezes it to re-lock and look again.
  */
 @Composable
-private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, anchorCaptured: Boolean,
-                        confirmed: Boolean, onAnchor: () -> Unit, onConfirm: () -> Unit, onRetry: () -> Unit,
-                        modifier: Modifier) {
+private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, capturedThumb: Bitmap?,
+                        anchorCaptured: Boolean, confirmed: Boolean, onAnchor: () -> Unit,
+                        onConfirm: () -> Unit, onRetry: () -> Unit, modifier: Modifier) {
     val locked = aim.tracking && aim.features >= 40
     var showSave by remember { mutableStateOf(false) }
     val saved = remember(showSave) { gun.savedLocation() }   // re-read right after a save closes the popup
-    Column(modifier.background(Color(0xFF0A0118)).bevel(Neon.Dim, 2.dp).padding(16.dp),
+    val shownPic = if (anchorCaptured) capturedThumb else thumb
+    Column(modifier.background(Color(0xFF0A0118)).bevel(Neon.Dim, 2.dp).padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text(if (anchorCaptured) "IS THIS WHAT YOU WANT TO TRACK?" else "HOLD THE PHONE\nHOW YOU WANT TO PLAY",
+            textAlign = TextAlign.Center, style = arcade(20.sp, Neon.Yellow, glow = Neon.Yellow).copy(lineHeight = 24.sp))
+        if (anchorCaptured) Text("This keeps your aim locked in place while you play.",
+            textAlign = TextAlign.Center, style = body(13.sp, Neon.White))
+        // The actual live picture (or, once anchored, the frozen shot) - not an abstract meter.
+        Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 6.dp), Alignment.Center) {
+            if (shownPic != null) Image(shownPic.asImageBitmap(), "what the camera is tracking",
+                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            else TutorialArt(Art.FLOOR, Modifier.fillMaxSize())
+        }
         when {
             !anchorCaptured -> {
-                Text("HOLD THE PHONE\nHOW YOU WANT TO PLAY", textAlign = TextAlign.Center,
-                    style = arcade(22.sp, Neon.Yellow, glow = Neon.Yellow).copy(lineHeight = 26.sp))
-                Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (locked) "LOCKED ON" else if (aim.tracking) "SEARCHING..." else "NOT TRACKING",
-                            style = arcade(26.sp, if (locked) Neon.Lime else Neon.Orange, glow = if (locked) Neon.Lime else null))
-                        // A clear, specific reason it's NOT good yet - not just a silent/stuck meter.
-                        if (!locked) Text(
-                            if (!aim.tracking) "CAMERA LOST THE ROOM" + (aim.failure?.let { " (${it.replace('_', ' ').lowercase()})" } ?: "")
-                            else "ONLY ${aim.features} ANCHOR POINTS - NEEDS 40. POINT AT SOMETHING WITH DETAIL.",
-                            style = body(12.sp, Neon.Orange), modifier = Modifier.padding(top = 4.dp))
-                        Spacer(Modifier.height(8.dp))
-                        SegmentBar((aim.features / 40f).coerceIn(0f, 1f), Modifier.fillMaxWidth(), segments = 20)
-                    }
-                }
+                Text(if (locked) "LOCKED ON" else if (aim.tracking) "SEARCHING..." else "NOT TRACKING",
+                    style = arcade(20.sp, if (locked) Neon.Lime else Neon.Orange, glow = if (locked) Neon.Lime else null))
+                // A clear, specific reason it's NOT good yet - not just a silent/stuck meter.
+                if (!locked) Text(
+                    if (!aim.tracking) "CAMERA LOST THE ROOM" + (aim.failure?.let { " (${it.replace('_', ' ').lowercase()})" } ?: "")
+                    else "ONLY ${aim.features} ANCHOR POINTS - NEEDS 40.",
+                    style = body(11.sp, Neon.Orange))
+                SegmentBar((aim.features / 40f).coerceIn(0f, 1f), Modifier.fillMaxWidth().padding(vertical = 4.dp), segments = 20)
                 if (locked) ArcadeButton("ANCHOR", onAnchor, color = Neon.Lime)
             }
             !confirmed -> {
-                Text("IS THIS WHAT YOU WANT TO TRACK?", textAlign = TextAlign.Center,
-                    style = arcade(18.sp, Neon.Yellow, glow = Neon.Yellow))
-                Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-                    if (thumb != null) Image(thumb.asImageBitmap(), "what the camera is tracking",
-                        Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                }
                 Row {
                     ArcadeButton("✓ YES, TRACK THIS", onConfirm, color = Neon.Lime)
                     ArcadeButton("RETRY", onRetry, small = true, color = Neon.Orange)
                 }
-                if (thumb != null) ArcadeButton("SAVE THIS LOCATION", { showSave = true }, small = true, color = Neon.Cyan)
+                if (shownPic != null) ArcadeButton("SAVE THIS LOCATION", { showSave = true }, small = true, color = Neon.Cyan)
             }
-            else -> Text("TRACKING CONFIRMED", style = arcade(24.sp, Neon.Lime, glow = Neon.Lime))
+            else -> Text("TRACKING CONFIRMED", style = arcade(20.sp, Neon.Lime, glow = Neon.Lime))
         }
         saved?.let { (name, savedThumb) ->
             Spacer(Modifier.height(6.dp))
@@ -500,8 +510,8 @@ private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, ancho
                 contentScale = ContentScale.Fit)
         }
     }
-    if (showSave && thumb != null) SaveLocationPopup(saved?.first ?: "") { name ->
-        if (name != null) gun.saveLocation(name, thumb)
+    if (showSave && shownPic != null) SaveLocationPopup(saved?.first ?: "") { name ->
+        if (name != null) gun.saveLocation(name, shownPic)
         showSave = false
     }
 }
