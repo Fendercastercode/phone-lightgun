@@ -48,7 +48,12 @@ data class AimState(
     val reloads: Int = 0, val shots: Int = 0, val flicks: Int = 0, val offscreenReloads: Int = 0,
     val recenters: Int = 0, val lastEvent: String = "", val anchorJumps: Int = 0,
     val netLoss: Double = 0.0, val netLateMs: Double = 0.0, val hot: Boolean = false,
-)
+    /** The screen position is a gyro estimate (camera lost the room and hasn't re-recognised it). */
+    val guessed: Boolean = false,
+) {
+    /** Everything is solid: the big green light. */
+    val solid get() = connected && calibrated && tracking && !gyroOnly && !guessed
+}
 
 /**
  * Wires everything together: gyro thread -> fuser -> ray -> filter -> screen -> UDP.
@@ -131,17 +136,28 @@ class GunController private constructor(private val app: Context) : SensorEventL
         private set
     private var trimToken = 0
 
-    fun startTrim() {
+    /** True while trimming was started by RECALIBRATE: the game is paused and the player holds a button. */
+    @Volatile var recalibrating = false
+        private set
+
+    /**
+     * [pause] = RECALIBRATE from Play: the PC pauses the game and shows the centre target; the
+     * player aims at it and holds the button (or pulls the trigger), then play resumes.
+     */
+    fun startTrim(pause: Boolean = false) {
         if (link?.connected != true) return
         trimming = true
+        recalibrating = pause
         val token = ++trimToken
-        link?.sendCtrl(JSONObject().put("type", "trim").put("on", true))
-        mainHandler.postDelayed({ if (trimming && trimToken == token) endTrim() }, 12_000)  // don't hang around
+        link?.sendCtrl(JSONObject().put("type", "trim").put("on", true).put("pause", pause))
+        // don't hang around (a paused game waits longer: the player may need to stand up first)
+        mainHandler.postDelayed({ if (trimming && trimToken == token) endTrim() }, if (pause) 60_000 else 12_000)
     }
 
     fun endTrim() {
         if (!trimming) return
         trimming = false
+        recalibrating = false
         val off = { link?.sendCtrl(JSONObject().put("type", "trim").put("on", false)) }
         off(); mainHandler.postDelayed({ if (!trimming) off() }, 300)   // UDP can drop one
     }
@@ -180,6 +196,7 @@ class GunController private constructor(private val app: Context) : SensorEventL
     @Volatile private var lastRay: Pair<Vec3, Vec3>? = null
     @Volatile private var triggerConverted = false
     private var seenBridges = 0
+    private var seenRelocs = 0
     @Volatile var running = false
         private set
 
@@ -353,7 +370,9 @@ class GunController private constructor(private val app: Context) : SensorEventL
         val hit = scr.intersect(o, d) ?: return false
         val h = o + d * hit.distance
         val delta = h - scr.center
-        if (delta.norm() > 0.25 * scr.widthM) {
+        // RECALIBRATE is deliberate (game paused, target on the TV): allow fixing a bigger offset
+        val limit = if (recalibrating) 0.45 else 0.25
+        if (delta.norm() > limit * scr.widthM) {
             // far off: almost certainly not aimed at the centre, or the anchor is wrong
             lastEvent = "recenter refused (off by ${"%.0f".format(delta.norm() * 100)} cm) — re-anchor instead"
             haptics.error()
@@ -589,14 +608,19 @@ class GunController private constructor(private val app: Context) : SensorEventL
         }
         if (engine.bridges != seenBridges) {
             seenBridges = engine.bridges
-            lastEvent = "tracking back - screen carried over (hold centre to recenter if off)"
+            lastEvent = "tracking back - aim may be a little off until the camera sees the room again"
+            haptics.reload()
+        }
+        if (engine.relocalizations != seenRelocs) {
+            seenRelocs = engine.relocalizations
+            lastEvent = "room recognised - aim back on the locked spot"
             haptics.reload()
         }
         val l = link
         aim = AimState(x, y, on, snap.tracking, f.gyroOnly, scr != null, snap.failure, rate, snap.fps,
             snap.featureCount, l?.rttMs ?: -1.0, l?.connected == true, b, aim.battery, markersSeen,
             reloads, shots, flicks, offscreenReloads, recenters, lastEvent, engine.anchorJumps,
-            l?.netLoss ?: 0.0, l?.netLateMs ?: 0.0, hot)
+            l?.netLoss ?: 0.0, l?.netLateMs ?: 0.0, hot, guessed = engine.aimGuessed)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

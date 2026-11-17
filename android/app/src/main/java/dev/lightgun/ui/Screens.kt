@@ -58,7 +58,7 @@ import dev.lightgun.net.Pairing
 import dev.lightgun.net.Protocol
 import kotlinx.coroutines.delay
 
-enum class Route(val label: String) { TUTORIAL("HOW TO"), HOME("PCs"), CALIBRATE("CALIBRATE"), PLAY("PLAY!"), SETTINGS("OPTIONS") }
+enum class Route(val label: String) { TUTORIAL("HOW TO"), HOME("PCs"), CALIBRATE("CALIBRATE"), PLAY("PLAY!"), SETTINGS("OPTIONS"), RESUME("WELCOME BACK") }
 
 @Composable
 fun LightGunApp(gun: GunController, route: Route, onNavigate: (Route) -> Unit, onScanQr: () -> Unit,
@@ -72,12 +72,13 @@ fun LightGunApp(gun: GunController, route: Route, onNavigate: (Route) -> Unit, o
         // animated grid only in menus: during play it would compete with ARCore for the GPU/CPU
         // animated bad guys only behind menus - not during play (CPU) or the tutorial (readability)
         var splash by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
-        RetroBackground(animate = splash || (route != Route.PLAY && route != Route.TUTORIAL)) {
+        val fullScreen = route == Route.PLAY || route == Route.TUTORIAL || route == Route.RESUME
+        RetroBackground(animate = splash || !fullScreen) {
             if (splash) { SplashScreen { splash = false }; return@RetroBackground }
             // keep clear of the camera cutout and any system bar that is currently showing
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                if (route != Route.PLAY && route != Route.TUTORIAL) TopBar(route, aim, onNavigate)
-                if (gun.newScreen && route != Route.PLAY && route != Route.TUTORIAL)
+                if (!fullScreen) TopBar(route, aim, onNavigate)
+                if (gun.newScreen && !fullScreen)
                     WarningBanner("NEW SCREEN (${gun.displayLabel}) - SET IT UP: CALIBRATE > 1 MEASURE YOUR TV, THEN 3 LOCK ON",
                         Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                 Box(Modifier.weight(1f)) {
@@ -89,6 +90,8 @@ fun LightGunApp(gun: GunController, route: Route, onNavigate: (Route) -> Unit, o
                         Route.CALIBRATE -> CalibrateScreen(gun, cal, aim, onNavigate)
                         Route.PLAY -> PlayScreen(gun, aim, cal, onNavigate)
                         Route.SETTINGS -> SettingsScreen(gun, aim)
+                        Route.RESUME -> ResumeScreen(gun, aim, cal, onPlay = { onNavigate(Route.PLAY) },
+                            onExit = { onNavigate(Route.HOME) })
                         Route.TUTORIAL -> TutorialScreen(gun, aim, cal, onScanQr) {
                             onNavigate(if (gun.aim.calibrated || gun.calib.lastResultOk) Route.PLAY else Route.CALIBRATE)
                         }
@@ -134,10 +137,11 @@ private fun TopBar(route: Route, a: AimState, onNavigate: (Route) -> Unit) {
             ChromeTitle("SIGHT ✦", 14.sp)
         }
         Spacer(Modifier.width(6.dp))
-        Route.entries.forEach { r ->
+        Route.entries.filter { it != Route.RESUME }.forEach { r ->
             ArcadeButton(r.label, { onNavigate(r) }, selected = r == route,
                 color = when (r) { Route.PLAY -> Neon.Lime; Route.HOME -> Neon.Cyan
-                    Route.CALIBRATE -> Neon.Magenta; Route.SETTINGS -> Neon.Yellow; Route.TUTORIAL -> Neon.Orange })
+                    Route.CALIBRATE -> Neon.Magenta; Route.SETTINGS -> Neon.Yellow; Route.TUTORIAL -> Neon.Orange
+                    Route.RESUME -> Neon.Lime })
         }
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
@@ -296,20 +300,21 @@ private fun CalibrateScreen(gun: GunController, cal: CalibrationController.State
  * once the player drags or resizes a zone; this is only the layout before that ever happens.
  */
 private fun defaultPlayLayout(triggerOnRight: Boolean): Map<String, ButtonRect> {
-    val tw = 1.4f / 3.35f; val hw = 0.95f / 3.35f; val rw = 1f / 3.35f
-    val triggerX = if (triggerOnRight) rw + hw else 0f
-    val reloadX = if (triggerOnRight) 0f else tw + hw
-    val hudX = if (triggerOnRight) rw else tw
-    val topH = 2f / 3f
-    val aw = rw * (1f / 4.4f); val cw = rw * (1.2f / 4.4f)
+    // trigger side: a big FIRE pad in the lower part (where the thumb rests) with RELOAD above it.
+    // middle: the status light and menu. other side: A / B / COIN / START as an easy 2x2 grid.
+    val sw = 0.32f; val hw = 1f - 2 * sw
+    val fireX = if (triggerOnRight) sw + hw else 0f
+    val padX = if (triggerOnRight) 0f else sw + hw
+    val fireTop = 0.36f
+    val half = sw / 2
     return mapOf(
-        "fire" to ButtonRect(triggerX, 0f, tw, 1f),
-        "hud" to ButtonRect(hudX, 0f, hw, 1f),
-        "reload" to ButtonRect(reloadX, 0f, rw, topH),
-        "a" to ButtonRect(reloadX, topH, aw, 1f - topH),
-        "b" to ButtonRect(reloadX + aw, topH, aw, 1f - topH),
-        "coin" to ButtonRect(reloadX + 2 * aw, topH, cw, 1f - topH),
-        "start" to ButtonRect(reloadX + 2 * aw + cw, topH, cw, 1f - topH),
+        "fire" to ButtonRect(fireX, fireTop, sw, 1f - fireTop),
+        "reload" to ButtonRect(fireX, 0f, sw, fireTop),
+        "hud" to ButtonRect(sw, 0f, hw, 1f),
+        "a" to ButtonRect(padX, 0f, half, 0.5f),
+        "b" to ButtonRect(padX + half, 0f, half, 0.5f),
+        "coin" to ButtonRect(padX, 0.5f, half, 0.5f),
+        "start" to ButtonRect(padX + half, 0.5f, half, 0.5f),
     )
 }
 
@@ -350,6 +355,12 @@ private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationContro
             gun.startCalibration(if (gun.hostKnowsSize && !quickFailed) "Q" else "C")
         }
     }
+    // picked the phone back up and it found the TV again: a buzz to go with the big green light
+    var wasSolid by remember { mutableStateOf(aim.solid) }
+    LaunchedEffect(aim.solid) {
+        if (aim.solid && !wasSolid) gun.haptics.reload()
+        wasSolid = aim.solid
+    }
     val right = gun.settings.triggerOnRight
     // what each pad does in the emulator in front (sent by the PC), e.g. A = "BUTTON 2" in MAME
     val labels = gun.emuStatus?.takeIf { System.currentTimeMillis() - it.atMs < 10_000 }?.labels ?: emptyMap()
@@ -365,8 +376,22 @@ private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationContro
     val defaults = defaultPlayLayout(right)
     Box(Modifier.fillMaxSize()) {
         EditableLayout(Modifier.fillMaxSize()) { container ->
+            // middle: HUD, fixed in place and drawn FIRST, so a button dragged over the middle
+            // sits on top of it and still works; long-press on an empty part = recenter
+            val hud = defaults["hud"]!!
+            Box(Modifier
+                .offset { IntOffset((hud.x * container.width).roundToInt(), (hud.y * container.height).roundToInt()) }
+                .size(with(LocalDensity.current) { (hud.w * container.width).toDp() },
+                      with(LocalDensity.current) { (hud.h * container.height).toDp() })) {
+                ArcadeZone("", "", Neon.Dim.copy(alpha = 0.5f), Modifier.fillMaxSize(), {},
+                    onLongPress = { gun.recenter() }, interactive = !editLayout)
+                Hud(gun, aim, cal, onNavigate, onEmu = { showEmu = true }, onInvite = { showInvite = true },
+                    onNet = { showNet = true }, editLayout = editLayout,
+                    onToggleEditLayout = { editLayout = !editLayout },
+                    onResetLayout = { layout = emptyMap(); gun.settings.playLayout = emptyMap() })
+            }
             MovableZone("fire", layout["fire"] ?: defaults["fire"]!!, container, editLayout, onRectChange = ::setRect) { m ->
-                ArcadeZone("FIRE!", "SHOOT OFF-SCREEN = RELOAD", Neon.Red, m,
+                ArcadeZone("FIRE!", "OFF-SCREEN = RELOAD", Neon.Red, m,
                     { gun.setButton(Protocol.BTN_TRIGGER, it) }, interactive = !editLayout)
             }
             MovableZone("reload", layout["reload"] ?: defaults["reload"]!!, container, editLayout, onRectChange = ::setRect) { m ->
@@ -387,20 +412,8 @@ private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationContro
                 ArcadeZone("ST", labels["start"] ?: "START", Neon.Magenta, m,
                     { gun.setButton(Protocol.BTN_START, it) }, interactive = !editLayout)
             }
-            // middle: HUD, fixed in place (not a button, so not part of the movable layout); long-press = recenter
-            val hud = defaults["hud"]!!
-            Box(Modifier
-                .offset { IntOffset((hud.x * container.width).roundToInt(), (hud.y * container.height).roundToInt()) }
-                .size(with(LocalDensity.current) { (hud.w * container.width).toDp() },
-                      with(LocalDensity.current) { (hud.h * container.height).toDp() })) {
-                ArcadeZone("", "", Neon.Dim.copy(alpha = 0.5f), Modifier.fillMaxSize(), {},
-                    onLongPress = { gun.recenter() }, interactive = !editLayout)
-                Hud(gun, aim, cal, onNavigate, onEmu = { showEmu = true }, onInvite = { showInvite = true },
-                    onNet = { showNet = true }, editLayout = editLayout,
-                    onToggleEditLayout = { editLayout = !editLayout },
-                    onResetLayout = { layout = emptyMap(); gun.settings.playLayout = emptyMap() })
-            }
         }
+        if (gun.recalibrating) RecalibrateOverlay(gun, aim)
         // buttons still reach the PC while this is open, so it doubles as a button test
         if (showEmu) EmuPopup(gun) { showEmu = false }
         if (showNet) NetPopup(aim) { showNet = false }
@@ -506,114 +519,123 @@ private fun EmuPopup(gun: GunController, onClose: () -> Unit) {
     }
 }
 
+/** One big light that says whether you can play, and the single thing to do if not. */
+private data class Light(val color: Color, val title: String, val line: String, val blink: Boolean = false)
+
+private fun lightFor(gun: GunController, aim: AimState, cal: CalibrationController.State): Light = when {
+    gun.mousePaused -> Light(Neon.Cyan, "MOUSE FREED", "The gun is off. Tap GUN ON to play.")
+    !aim.connected -> Light(Neon.Red, "NO PC", "Start RetroSight on the PC (same Wi-Fi).", blink = true)
+    gun.newScreen && !gun.calib.active -> Light(Neon.Red, "NEW SCREEN", "Tap MENU and measure this TV.")
+    gun.trimming -> Light(Neon.Lime, "SHOOT THE CENTER", "One shot at the target in the middle of the TV.", blink = true)
+    gun.calib.active -> Light(Neon.Yellow, "LOCKING ON...", cal.message.ifEmpty { "Point the back camera at the TV." }, blink = true)
+    cal.phase == Phase.FAILED && !aim.calibrated -> Light(Neon.Red, "LOCK-ON FAILED", cal.message.ifEmpty { "Tap TRY AGAIN." })
+    !aim.calibrated -> Light(Neon.Red, "NOT LOCKED", "Point the back camera at the TV.", blink = true)
+    !aim.tracking || aim.gyroOnly -> Light(Neon.Yellow, "CAMERA LOST THE ROOM",
+        "Point it at the floor or furniture for a second.", blink = true)
+    aim.guessed -> Light(Neon.Yellow, "AIM MAY BE OFF",
+        "Let the camera see the room again, or tap RECALIBRATE.")
+    else -> Light(Neon.Lime, "LOCKED ON ✓", if (aim.onScreen) "Ready - fire away!" else "Aim at the TV.")
+}
+
+@Composable
+private fun StatusLight(l: Light, modifier: Modifier) {
+    Blink(900) { a ->
+        val alpha = if (l.blink) 0.55f + 0.45f * a else 1f
+        Column(modifier.background(l.color.copy(alpha = 0.22f * alpha)).bevel(l.color, 3.dp).padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(26.dp).alpha(alpha).background(l.color, androidx.compose.foundation.shape.CircleShape))
+            Text(l.title, textAlign = TextAlign.Center, style = arcade(17.sp, l.color, glow = l.color))
+            Text(l.line, textAlign = TextAlign.Center,
+                style = arcade(10.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 13.sp))
+        }
+    }
+}
+
 @Composable
 private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.State, onNavigate: (Route) -> Unit,
                 onEmu: () -> Unit, onInvite: () -> Unit, onNet: () -> Unit, editLayout: Boolean,
                 onToggleEditLayout: () -> Unit, onResetLayout: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally,
+    Column(Modifier.fillMaxSize().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween) {
+        if (editLayout) Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("DRAG A BUTTON TO MOVE IT - ANYWHERE, EVEN HERE", textAlign = TextAlign.Center,
+                style = arcade(11.sp, Neon.Yellow, glow = Neon.Yellow))
+            Text("DRAG ITS YELLOW CORNER TO RESIZE", style = arcade(9.sp, Neon.Dim))
+        } else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            StatusLight(lightFor(gun, aim, cal), Modifier.fillMaxWidth())
+            // the one action that fixes the light, right under it
+            when {
+                gun.trimming && !gun.recalibrating -> ArcadeButton("SKIP", { gun.endTrim() }, small = true, color = Neon.Dim)
+                gun.calib.active && cal.flow == "Q" -> ArcadeButton("SHOOT 4 CORNERS INSTEAD", {
+                    gun.cancelCalibration(); gun.startCalibration("C") }, small = true, color = Neon.Dim)
+                cal.phase == Phase.FAILED && !aim.calibrated && !gun.calib.active ->
+                    ArcadeButton("TRY AGAIN", { gun.startCalibration(if (gun.hostKnowsSize) "Q" else "C") }, small = true, color = Neon.Lime)
+            }
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChromeTitle("${gun.player}UP", 22.sp)
-                Spacer(Modifier.width(6.dp))
                 Text(" P${gun.player} ", Modifier.background(if (gun.player == 1) Neon.Red else Neon.Cyan),
-                    style = arcade(14.sp, Neon.Night))
-            }
-            Text("%06d".format(aim.shots * 100 + aim.reloads * 10), style = arcade(22.sp, Neon.Yellow, glow = Neon.Orange))
-            Row {
-                Text("SHOTS ${aim.shots}  ", style = arcade(10.sp, Neon.Red))
-                Text("RELOADS ${aim.reloads}", style = arcade(10.sp, Neon.Cyan))
+                    style = arcade(12.sp, Neon.Night))
+                Text("  %06d".format(aim.shots * 100 + aim.reloads * 10), style = arcade(16.sp, Neon.Yellow, glow = Neon.Orange))
             }
             EmuChip(gun, onEmu)
             NetChip(aim, onNet)
+            if (aim.lastEvent.isNotEmpty()) Text(aim.lastEvent.uppercase(), textAlign = TextAlign.Center,
+                style = arcade(9.sp, Neon.Cyan, weight = FontWeight.Bold))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            when {
-                gun.mousePaused -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("MOUSE FREED", style = arcade(16.sp, Neon.Cyan, glow = Neon.Cyan))
-                    Text("THE GUN IS OFF - TAP GUN ON TO PLAY", style = arcade(9.sp, Neon.White))
-                }
-                gun.newScreen && !gun.calib.active -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEW SCREEN!", style = arcade(18.sp, Neon.Red, glow = Neon.Red))
-                    Text("CALIBRATION NEEDED - TAP MENU", style = arcade(10.sp, Neon.White))
-                }
-                gun.trimming -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Blink(900) { a ->
-                        Text("SHOOT THE CENTER TARGET ON THE TV", Modifier.alpha(0.4f + 0.6f * a),
-                            style = arcade(14.sp, Neon.Lime, glow = Neon.Lime))
-                    }
-                    Text("FINE-TUNES THE AIM - ONE SHOT", style = arcade(9.sp, Neon.White))
-                    ArcadeButton("SKIP", { gun.endTrim() }, small = true, color = Neon.Dim)
-                }
-                gun.calib.active && cal.flow == "B" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("RECALIBRATING - GAME PAUSED", style = arcade(12.sp, Neon.Magenta, glow = Neon.Magenta))
-                    Blink(1200) { a ->
-                        Text(cal.message.uppercase().ifEmpty { "SHOOT THE TARGETS ON THE TV" }, Modifier.alpha(0.4f + 0.6f * a),
-                            style = arcade(11.sp, Neon.Yellow, glow = Neon.Yellow))
-                    }
-                    ArcadeButton("CANCEL", { gun.cancelCalibration() }, small = true, color = Neon.Dim)
-                }
-                cal.phase == Phase.FAILED && cal.flow == "B" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("RECALIBRATE FAILED", style = arcade(14.sp, Neon.Red, glow = Neon.Red))
-                    if (cal.message.isNotEmpty()) Text(cal.message.uppercase(),
-                        style = arcade(9.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 13.sp))
-                    Row {
-                        ArcadeButton("TRY AGAIN", { gun.startCalibration("B") }, small = true, color = Neon.Lime)
-                        ArcadeButton("KEEP OLD", { gun.cancelCalibration() }, small = true, color = Neon.Dim)
-                    }
-                }
-                gun.calib.active -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Blink(1200) { a ->
-                        Text(cal.message.uppercase(), Modifier.alpha(0.4f + 0.6f * a), style = arcade(12.sp, Neon.Yellow, glow = Neon.Yellow))
-                    }
-                    if (cal.flow == "Q") ArcadeButton("SHOOT 4 CORNERS INSTEAD", {
-                        gun.cancelCalibration(); gun.startCalibration("C") }, small = true, color = Neon.Dim)
-                }
-                cal.phase == Phase.FAILED && !aim.calibrated -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LOCK-ON FAILED", style = arcade(14.sp, Neon.Red, glow = Neon.Red))
-                    if (cal.message.isNotEmpty()) Text(cal.message.uppercase(),
-                        style = arcade(9.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 13.sp))
-                    ArcadeButton("TRY AGAIN", { gun.startCalibration(if (gun.hostKnowsSize) "Q" else "C") }, small = true, color = Neon.Lime)
-                }
-                !aim.connected -> Blink { a -> Text("INSERT COIN", Modifier.alpha(a), style = arcade(18.sp, Neon.Yellow, glow = Neon.Orange)) }
-                !aim.tracking || aim.gyroOnly -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("GYRO ONLY", style = arcade(16.sp, Neon.Yellow, glow = Neon.Yellow))
-                    Text("CAMERA LOST THE ROOM" + (aim.failure?.let { " (${it.replace('_', ' ')})" } ?: ""),
-                        style = arcade(9.sp, Neon.Orange))
-                    Text("LET IT SEE THE FLOOR OR FURNITURE, NOT THE TV OR A BLANK WALL", style = arcade(9.sp, Neon.Dim))
-                }
-                !aim.calibrated -> Text("AIM AT TV", style = arcade(16.sp, Neon.Magenta, glow = Neon.Magenta))
-                aim.onScreen -> Text("LOCKED ON", style = arcade(18.sp, Neon.Lime, glow = Neon.Lime))
-                else -> Text("OFF SCREEN", style = arcade(16.sp, Neon.Cyan, glow = Neon.Cyan))
-            }
-            if (aim.lastEvent.isNotEmpty()) Text(aim.lastEvent.uppercase(), style = arcade(9.sp, Neon.Cyan, weight = FontWeight.Bold))
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (editLayout) {
-                Text("DRAG A BUTTON TO MOVE IT", style = arcade(10.sp, Neon.Yellow, glow = Neon.Yellow))
-                Text("DRAG ITS YELLOW CORNER TO RESIZE", style = arcade(9.sp, Neon.Dim))
+            if (editLayout) Row {
+                ArcadeButton("RESET", onResetLayout, small = true, color = Neon.Orange)
+                ArcadeButton("DONE", onToggleEditLayout, small = true, color = Neon.Lime)
             } else {
-                Text("BATT ${aim.battery}%  ${aim.rateHz.toInt()}HZ  ${if (aim.rttMs >= 0) "%.0fMS".format(aim.rttMs / 2) else "--"}",
-                    style = arcade(9.sp, Neon.Dim))
-                Text("HOLD HERE = RECENTER", style = arcade(9.sp, Neon.Dim))
-            }
-            Row {
-                if (editLayout) {
-                    ArcadeButton("RESET", onResetLayout, small = true, color = Neon.Orange)
-                    ArcadeButton("DONE", onToggleEditLayout, small = true, color = Neon.Lime)
-                } else {
-                    // pauses the game, the PC shows the barrel targets, then it's back to the game
-                    if (aim.connected && !gun.newScreen && !gun.calib.active && !gun.trimming)
-                        ArcadeButton("RECALIBRATE", { gun.startCalibration("B") }, small = true, color = Neon.Magenta)
+                // pauses the game; aim at the TV's centre target and hold a button - then straight back
+                if (aim.connected && aim.calibrated && !gun.newScreen && !gun.calib.active && !gun.trimming)
+                    ArcadeButton("RECALIBRATE", { gun.startTrim(pause = true) }, color = Neon.Magenta)
+                Row {
                     if (aim.connected)
                         ArcadeButton(if (gun.mousePaused) "GUN ON" else "FREE MOUSE",
                             { gun.freeMouse(!gun.mousePaused) }, small = true,
                             color = if (gun.mousePaused) Neon.Lime else Neon.Cyan)
                     ArcadeButton("MENU", { onNavigate(Route.CALIBRATE) }, small = true, color = Neon.Dim)
+                }
+                Row {
                     ArcadeButton("LAYOUT", onToggleEditLayout, small = true, color = Neon.Dim)
                     if (gun.player == 1 && aim.connected) ArcadeButton("+P2", onInvite, small = true, color = Neon.Cyan)
                 }
+                Text("BATT ${aim.battery}%  ${if (aim.rttMs >= 0) "%.0fMS".format(aim.rttMs / 2) else "--"}",
+                    style = arcade(8.sp, Neon.Dim))
             }
+        }
+    }
+}
+
+/**
+ * RECALIBRATE: the game is paused on the PC and a target shows in the middle of the TV. Aim at
+ * it and hold the big button for 2 seconds (or pull the trigger) - then it's straight back to
+ * the game.
+ */
+@Composable
+private fun RecalibrateOverlay(gun: GunController, aim: AimState) {
+    Box(Modifier.fillMaxSize().background(Neon.Night.copy(alpha = 0.94f)), Alignment.Center) {
+        Row(Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("GAME PAUSED", style = arcade(26.sp, Neon.Magenta, glow = Neon.Magenta))
+                Spacer(Modifier.height(10.dp))
+                Text("1. Point the gun at the target in the middle of the TV.", textAlign = TextAlign.Center,
+                    style = arcade(14.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 19.sp))
+                Spacer(Modifier.height(6.dp))
+                Text("2. Hold the big button for 2 seconds.", textAlign = TextAlign.Center,
+                    style = arcade(14.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 19.sp))
+                Spacer(Modifier.height(6.dp))
+                Text("The game starts again by itself.", textAlign = TextAlign.Center, style = arcade(11.sp, Neon.Dim))
+                if (aim.lastEvent.startsWith("recenter refused")) Text(
+                    "TOO FAR FROM THE CENTER - AIM AT THE TARGET AND HOLD AGAIN", textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp), style = arcade(11.sp, Neon.Orange, glow = Neon.Orange))
+                Spacer(Modifier.height(12.dp))
+                ArcadeButton("CANCEL - BACK TO GAME", { gun.endTrim() }, small = true, color = Neon.Dim)
+            }
+            ArcadeZone("HOLD", "2 SECONDS", Neon.Magenta, Modifier.weight(1f).fillMaxHeight(), {},
+                onLongPress = { if (gun.recenter()) gun.endTrim() }, longPressMs = 2000)
         }
     }
 }

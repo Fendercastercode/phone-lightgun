@@ -58,8 +58,10 @@ class Settings(context: Context) {
         get() = sp.getBoolean("auto_reanchor", true)
         set(v) = sp.edit().putBoolean("auto_reanchor", v).apply()
     var dimDuringPlay: Boolean
-        get() = sp.getBoolean("dim", true)
-        set(v) = sp.edit().putBoolean("dim", v).apply()
+        // was on by default (brightness 5% during play), which looked like the phone was stuck dim;
+        // new key so everyone starts at normal brightness - still switchable in OPTIONS
+        get() = sp.getBoolean("dim_v2", false)
+        set(v) = sp.edit().putBoolean("dim_v2", v).apply()
 
     var flickReload: Boolean
         get() = sp.getBoolean("flick_reload", true)
@@ -105,11 +107,11 @@ class Settings(context: Context) {
 
     /** Custom position/size for each Play-screen button, keyed by button id. Missing ids use the default layout. */
     var playLayout: Map<String, ButtonRect>
-        get() = sp.getString("play_layout", null)?.let { s ->
+        get() = sp.getString("play_layout_v2", null)?.let { s ->
             val o = JSONObject(s)
             o.keys().asSequence().associateWith { k -> ButtonRect.fromJson(o.getJSONObject(k)) }
         } ?: emptyMap()
-        set(v) = sp.edit().putString("play_layout",
+        set(v) = sp.edit().putString("play_layout_v2",
             JSONObject().apply { v.forEach { (k, r) -> put(k, r.toJson()) } }.toString()).apply()
 
     /** Host display id ("\\.\DISPLAY1:2560x1440") the current calibration belongs to. */

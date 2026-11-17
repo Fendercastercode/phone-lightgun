@@ -70,11 +70,15 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         goImmersive()
         // start on the PC list (pick a calibrated PC or add a new one); first run: guided setup
-        route = if (!gun.settings.tutorialDone) Route.TUTORIAL else Route.HOME
+        // Tutorial only on a brand-new install (no PC saved yet). Finishing the tutorial is
+        // recorded per PC, so the old phone-wide "tutorial done" flag stayed false for anyone who
+        // paired a PC - and every launch went back into the tutorial.
+        val firstRun = gun.settings.hosts.all().isEmpty() && !gun.settings.tutorialDone
+        route = if (firstRun) Route.TUTORIAL else Route.HOME
         // Only auto-reconnect to a pc that's still actually in the saved list - otherwise a
         // forgotten pc (which clears hostId but can't un-set this legacy single-pairing field
         // retroactively) would just come right back on the next cold launch.
-        if (!gun.settings.tutorialDone) gun.settings.pairing?.let { p ->
+        if (firstRun) gun.settings.pairing?.let { p ->
             if (gun.settings.hosts.get(HostBook.idOf(p)) != null) gun.connect(p)
         }
         setContent {
@@ -85,8 +89,10 @@ class MainActivity : ComponentActivity() {
                     // Not calibrated yet (never finished setup, or typed in its pairing code
                     // instead of scanning it): the full walkthrough, same reasoning as a fresh
                     // QR pairing above - not the bare Calibrate screen, which has no camera-check.
-                    if (h.calibrated) gun.lockOnPlay = true   // always re-lock on the TV, then play
-                    route = if (h.calibrated) Route.PLAY else Route.TUTORIAL
+                    // set up before: a few quick questions (same TV? same spot?), lock on and a
+                    // barrel check, then the game - so it's always clear what has been done
+                    gun.lockOnPlay = false
+                    route = if (h.calibrated) Route.RESUME else Route.TUTORIAL
                     onRouteChanged(route)
                 })
         }
@@ -94,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     private fun scanQr() {
         gun.stop() // the scanner needs the camera
+        openedChild = true
         scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
             .setPrompt("Scan the QR code shown on the PC").setBeepEnabled(false).setOrientationLocked(false))
     }
@@ -105,7 +112,7 @@ class MainActivity : ComponentActivity() {
         }
         return try {
             when (ArCoreApk.getInstance().requestInstall(this, !installRequested)) {
-                ArCoreApk.InstallStatus.INSTALL_REQUESTED -> { installRequested = true; false }
+                ArCoreApk.InstallStatus.INSTALL_REQUESTED -> { installRequested = true; openedChild = true; false }
                 else -> true
             }
         } catch (e: Exception) {
@@ -115,7 +122,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onRouteChanged(r: Route) {
-        val needsAr = r == Route.CALIBRATE || r == Route.PLAY || r == Route.SETTINGS || r == Route.TUTORIAL
+        val needsAr = r == Route.CALIBRATE || r == Route.PLAY || r == Route.SETTINGS || r == Route.TUTORIAL || r == Route.RESUME
         if (needsAr && arReady()) gun.start()
         val lp = window.attributes
         lp.screenBrightness = if (r == Route.PLAY && gun.settings.dimDuringPlay) 0.05f
@@ -146,6 +153,34 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         gun.stop()
+    }
+
+    // Leaving the app and coming back always starts at the PC picker (then the welcome-back
+    // questions), never half-way through whatever screen was open - that was confusing. Not when
+    // we opened something ourselves (QR scanner, ARCore install), and not when the screen just
+    // turned off mid-game for a moment: only if it stayed off a while.
+    private var openedChild = false
+    private var stoppedAt = 0L
+    private var leftApp = false
+
+    override fun onStop() {
+        super.onStop()
+        if (isChangingConfigurations || openedChild) return
+        stoppedAt = android.os.SystemClock.elapsedRealtime()
+        leftApp = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (openedChild) { openedChild = false; return }
+        if (stoppedAt == 0L) return
+        val away = android.os.SystemClock.elapsedRealtime() - stoppedAt
+        stoppedAt = 0L
+        if (gun.settings.hosts.all().isNotEmpty() && (leftApp || away > 5 * 60_000L) && route != Route.HOME) {
+            if (gun.calib.active) gun.cancelCalibration()
+            gun.endTrim()
+            route = Route.HOME
+        }
     }
 
     // ---------------------------------------------------------------- physical buttons

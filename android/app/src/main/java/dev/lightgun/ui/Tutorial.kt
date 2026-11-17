@@ -202,7 +202,7 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
         listOf("On the PC, open RetroArch (or MAME, etc.) and load a light-gun game, full screen.",
             "The PC window shows if the emulator isn't seeing the gun - click FIX there (or tap FIX in PLAY).",
             "RetroArch: after a fix, load the game again. Then tap PLAY!",
-            "Aim feels off later? In PLAY tap RECALIBRATE. It pauses the game and shows targets on the TV.",
+            "Aim feels off later? In PLAY tap RECALIBRATE: the game pauses, aim at the target in the middle of the TV and hold the button for 2 seconds.",
             "Need the PC mouse? In PLAY tap FREE MOUSE, then GUN ON when you're done."),
         Art.GAME, success = "Shots land where you aim in the game.",
         stuck = listOf("Switched games? Just load the new one - the PC follows it (RetroArch needs Network Commands on; FIX turns it on).",

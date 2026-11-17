@@ -99,6 +99,19 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
     @Volatile var bridges = 0
         private set
     private var lastAnchorCenter: Vec3? = null
+    /**
+     * The real screen anchor, kept after a gyro bridge was committed as a new anchor. The bridge
+     * is only as good as how still the phone was while the camera was blind (a fast swing away
+     * moves it tens of cm), so it is a stand-in: the moment ARCore re-recognises the room and
+     * this anchor tracks again, it takes over and the aim snaps back to where it was locked.
+     */
+    private class Saved(val anchor: Anchor, val w: Double, val h: Double, val offU: Double, val offV: Double)
+    private var original: Saved? = null
+    @Volatile var relocalizations = 0
+        private set
+    /** The screen is currently a gyro estimate, not the real anchor (aim may be a little off). */
+    @Volatile var aimGuessed = false
+        private set
 
     private var lastCamFrame = 0L
     private var lastThumb = 0L
@@ -159,7 +172,7 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
     /** Place the screen (world frame of the current session) and anchor it at its centre. */
     fun setScreen(rect: ScreenRect) = handler?.post {
         val s = session ?: return@post
-        anchor?.detach()
+        anchor?.detach(); dropOriginal()
         val c = rect.center
         val q = Quat.fromAxes(rect.u, rect.v, rect.n)
         anchor = s.createAnchor(Pose(c.toFloatArray(), q.toFloatArray()))
@@ -170,8 +183,10 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
     }
 
     fun clearScreen() = handler?.post {
-        anchor?.detach(); anchor = null; lastScreen = null
+        anchor?.detach(); anchor = null; lastScreen = null; dropOriginal()
     }
+
+    private fun dropOriginal() { original?.anchor?.detach(); original = null }
 
     /** Recenter: shift the screen in its own plane by (du, dv) metres, blended over [blendMs]. */
     fun nudgeScreen(du: Double, dv: Double, blendMs: Double = 200.0) = handler?.post {
@@ -276,6 +291,21 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
             offU = step(offU, offTargetU, offRateU * dt)
             offV = step(offV, offTargetV, offRateV * dt)
         }
+        original?.let { o ->
+            when (o.anchor.trackingState) {
+                TrackingState.TRACKING -> if (tracking) {
+                    Log.i(TAG, "original screen anchor re-localized: replacing the committed gyro bridge")
+                    anchor?.detach()
+                    anchor = o.anchor
+                    screenW = o.w; screenH = o.h
+                    offU = o.offU; offV = o.offV; offTargetU = o.offU; offTargetV = o.offV
+                    original = null; bridged = null; anchorPausedSince = 0L; lastAnchorCenter = null
+                    relocalizations++
+                }
+                TrackingState.STOPPED -> { o.anchor.detach(); original = null }
+                else -> Unit
+            }
+        }
         val a = anchor
         if (resumed != null) worldEpoch++
         // Tracking just came back. If the anchor isn't tracking, ARCore is in a new world frame:
@@ -307,7 +337,7 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
                     Quat(ap.qx().toDouble(), ap.qy().toDouble(), ap.qz().toDouble(), ap.qw().toDouble()),
                     screenW, screenH, offU, offV)
             }
-            TrackingState.STOPPED -> if (coldResume && bridged == null) { coldResume = false; loseScreen("phone was paused") }
+            TrackingState.STOPPED -> if (coldResume && bridged == null) { coldResume = false; loseScreen("phone was paused", keepOld = true) }
                 else lastScreen?.let { reanchor(it, "anchor stopped") } ?: loseScreen("anchor stopped")
             TrackingState.PAUSED -> {
                 // Camera tracks but our anchor doesn't: we're in a different ARCore map. Keep
@@ -316,16 +346,17 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
                 if (coldResume && bridged == null) {
                     if (!tracking) Unit
                     else if (coldSince == 0L) coldSince = t
-                    else if (t - coldSince > COLD_GRACE_NS) { coldResume = false; loseScreen("phone was paused") }
+                    else if (t - coldSince > COLD_GRACE_NS) { coldResume = false; loseScreen("phone was paused", keepOld = true) }
                 } else if (!tracking) anchorPausedSince = 0L
                 else if (anchorPausedSince == 0L) anchorPausedSince = t
                 else if (t - anchorPausedSince > COMMIT_BRIDGE_NS) {
                     val sc = bridged ?: lastScreen
-                    if (sc != null) reanchor(sc, "old map not recovered") else loseScreen("world reset")
+                    if (sc != null) reanchor(sc, "old map not recovered", keepOld = true) else loseScreen("world reset")
                 }
             }
         }
 
+        aimGuessed = lastScreen != null && (bridged != null || original != null)
         frameCount++
         if (fpsT0 == 0L) fpsT0 = t
         if (t - fpsT0 > 1_000_000_000L) {
@@ -391,19 +422,27 @@ class ArEngine(private val context: Context, private val fuser: PoseFuser) {
     }
 
     /** Replace the anchor with one at [rect] (world frame of the current map). AR thread only. */
-    private fun reanchor(rect: ScreenRect, reason: String) {
+    private fun reanchor(rect: ScreenRect, reason: String, keepOld: Boolean = false) {
         val s = session ?: return
         Log.i(TAG, "re-anchoring screen: $reason")
-        anchor?.detach()
+        val old = anchor
+        // keep the first real anchor (not a bridge of a bridge) to come back to if the room is recognised again
+        if (keepOld && old != null && original == null) original = Saved(old, screenW, screenH, offU, offV)
+        else old?.detach()
         anchor = s.createAnchor(Pose(rect.center.toFloatArray(), Quat.fromAxes(rect.u, rect.v, rect.n).toFloatArray()))
         screenW = rect.widthM; screenH = rect.heightM
         offU = 0.0; offV = 0.0; offTargetU = 0.0; offTargetV = 0.0  // rect already includes the offset
         lastScreen = rect; bridged = null; anchorPausedSince = 0L; lastAnchorCenter = null
     }
 
-    private fun loseScreen(reason: String) {
+    private fun loseScreen(reason: String, keepOld: Boolean = false) {
         Log.w(TAG, "screen anchor lost: $reason")
-        anchor?.detach(); anchor = null; lastScreen = null
+        val old = anchor
+        // After the app was paused the anchor is usually just not re-recognised YET: keep it, so
+        // the lock comes back by itself once the camera sees the room again (even mid lock-on).
+        if (keepOld && old != null && original == null) original = Saved(old, screenW, screenH, offU, offV)
+        else { old?.detach(); if (!keepOld) dropOriginal() }
+        anchor = null; lastScreen = null
         anchorPausedSince = 0L; lastAnchorCenter = null
         screenLostListener?.invoke(reason)
     }

@@ -275,6 +275,7 @@ class HostWindow(QWidget):
         self.stale_timer = QTimer(self, interval=100, timeout=lambda: self.injector.release_stale(0.3))
         self.stale_timer.start()
         self._trim_since: dict[int, float] = {}
+        self._trim_limit: dict[int, float] = {}   # seconds before a lost "trim off" is assumed
         self.timer.start()
         log.info("listening on UDP %s:%d", ", ".join(local_ips()), self.rx.port)
         if not self.store.data.get("paired_once"):
@@ -549,11 +550,10 @@ class HostWindow(QWidget):
             return
         self._auto_fixed.add(sig)
         log.info("auto setup: %s isn't set up for the gun - fixing: %s", st.name, "; ".join(plan.describe()))
-        res = self._fix_emulator(confirm=False)
+        res = self._fix_emulator(confirm=False, auto=True)
         for gid, g in list(self.rx.guns.items()):
             if g.addr is not None:
-                self.rx.send_ctrl(gid, {"type": "emu_fix_result", "ok": res["ok"],
-                                        "message": f"Set up {st.name} for the gun automatically. {res['message']}"})
+                self.rx.send_ctrl(gid, {"type": "emu_fix_result", "ok": res["ok"], "message": res["message"]})
 
     def _auto_preset_toggled(self, on: bool):
         self.store.data["auto_preset"] = on
@@ -642,7 +642,7 @@ class HostWindow(QWidget):
                                                           "fix": "On the PC app click 'Set up player 2 controller'"}]
                     self.rx.send_ctrl(gid, msg)
 
-    def _fix_emulator(self, confirm: bool) -> dict:
+    def _fix_emulator(self, confirm: bool, auto: bool = False) -> dict:
         st = self._emu
         if st is None:
             return {"ok": False, "message": "No emulator seen yet - bring it to the front first."}
@@ -679,12 +679,17 @@ class HostWindow(QWidget):
         elif plan.emulator == "MAME":
             parts.append("Restart MAME.")
         msg = " ".join(parts)
+        if auto and not errors:
+            # first open of this game: say plainly what happened and the one thing to do
+            msg = "Controls auto saved on this first open. Please reset the game to lock them in."
+            if waiting:
+                msg += f" (Close {plan.emulator} first - some settings save when it closes.)"
         if errors and not done and not waiting:
             log.warning("emulator fix failed: %s", msg)
             self.overlay.show_message(msg, seconds=6)
             return {"ok": False, "message": msg}
         log.info("emulator fix: %s", msg)
-        self.overlay.show_message(msg, seconds=5)
+        self.overlay.show_message(msg, seconds=8 if auto else 5)
         self._emu_t = 0.0  # re-check right away
         return {"ok": True, "message": msg}
 
@@ -762,10 +767,11 @@ class HostWindow(QWidget):
             c.tick()
         # the phone's "trim off" got lost: don't leave that gun paused behind a target
         for gid, t0 in list(self._trim_since.items()):
-            if time.monotonic() - t0 > 15:
+            if time.monotonic() - t0 > self._trim_limit.get(gid, 15):
                 log.info("gun %d: trim timed out, resuming", gid)
                 self._trim_since.pop(gid, None)
                 self.injector.set_enabled(True, gid)
+                self._pause_game(False)
                 if self.overlay.mode == "targets":
                     self.overlay.hide()
 
@@ -879,13 +885,20 @@ class HostWindow(QWidget):
                                       seconds=2)
         elif t == "trim":      # after a quick lock-on: one shot at the centre target fine-tunes the aim
             if msg.get("on"):
+                pause = bool(msg.get("pause"))           # RECALIBRATE on the phone: freeze the game too
                 self._trim_since[gid] = time.monotonic()
+                self._trim_limit[gid] = 70 if pause else 15
                 self.injector.set_enabled(False, gid)     # that shot must not reach the game
+                if pause:
+                    self._pause_game(True)
                 who = f"PLAYER {gid + 1}: " if gid > 0 else ""
-                self.overlay.show_targets([(0.5, 0.5)], 0, f"{who}Shoot the center target to fine-tune the aim")
+                self.overlay.show_targets([(0.5, 0.5)], 0, f"{who}Game paused - aim at the center target and "
+                                          f"hold RECALIBRATE on the phone" if pause else
+                                          f"{who}Shoot the center target to fine-tune the aim")
             else:
                 self._trim_since.pop(gid, None)
                 self.injector.set_enabled(True, gid)
+                self._pause_game(False)                  # only resumes a pause we made
                 if self.overlay.mode == "targets":
                     self.overlay.hide()                  # hands the focus back to the game
         elif t == "bye":   # the phone forgot this pc (or is disconnecting) - clear it right away

@@ -263,7 +263,7 @@ fun SegmentBar(fraction: Float, modifier: Modifier = Modifier, segments: Int = 1
  */
 @Composable
 fun ArcadeZone(label: String, sub: String, color: Color, modifier: Modifier, onPress: (Boolean) -> Unit,
-               onLongPress: (() -> Unit)? = null, interactive: Boolean = true) {
+               onLongPress: (() -> Unit)? = null, interactive: Boolean = true, longPressMs: Long = 800) {
     var down by remember { mutableStateOf(false) }
     val press by rememberUpdatedState(onPress)
     val longPress by rememberUpdatedState(onLongPress)
@@ -276,7 +276,7 @@ fun ArcadeZone(label: String, sub: String, color: Color, modifier: Modifier, onP
                 down = true; press(true)
                 val lp = longPress
                 if (lp != null) {
-                    val up = withTimeoutOrNull(800) { waitForUpOrCancellation() }
+                    val up = withTimeoutOrNull(longPressMs) { waitForUpOrCancellation() }
                     if (up == null) { lp(); waitForUpOrCancellation() }
                 } else waitForUpOrCancellation()
                 down = false; press(false)
