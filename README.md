@@ -16,6 +16,22 @@ over UDP as an absolute mouse position.
 
 ## Quick start
 
+**First time? Do it in this order:**
+
+1. **On the PC:** start the host — double-click `start-host.bat` (Windows) or run
+   `./start-host.sh` (Linux, `chmod +x` it first). Leave its window open.
+2. In that window, click **Show pairing QR** — a code appears on the TV/monitor.
+3. **On the phone:** open RetroSight and tap **Scan QR**, then point the camera at the code.
+4. Follow the in-app tutorial on the phone — it walks you through the camera check, measuring
+   the TV, and locking on. This only takes a couple of minutes and only needs redoing if you
+   move the TV or the phone's camera genuinely loses track of the room.
+5. **On the PC:** open RetroArch (or MAME, etc.) and load a light-gun game.
+6. Back on the phone, tap **FIX** (or let **Set up the emulator automatically** handle it) if
+   the PC window shows the emulator isn't seeing the gun yet.
+7. Aim at the TV and pull the trigger.
+
+Everything below is reference detail for each of those steps and for troubleshooting.
+
 **PC host** (Python 3.10+):
 
 ```

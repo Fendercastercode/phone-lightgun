@@ -181,6 +181,13 @@ class HostWindow(QWidget):
         top_row.addStretch(1)
         top_row.addWidget(self.advanced_btn)
 
+        self.quick_steps = QLabel(
+            "QUICK STEPS  1. Click SHOW PAIRING QR below.  2. On the phone, open RetroSight, tap SCAN QR, and "
+            "follow its tutorial.  3. Open RetroArch/MAME and load a light-gun game.  4. If the PC says the "
+            "emulator isn't seeing the gun, click FIX below (or let it fix itself).  5. Aim at the screen and fire.",
+            wordWrap=True)
+        self.quick_steps.setStyleSheet(f"color: {theme.CYAN}; font-weight: bold;")
+
         self.form = form = QFormLayout()
         form.addRow("Game monitor", self.mon_box)
         preset_row = QHBoxLayout()
@@ -204,6 +211,7 @@ class HostWindow(QWidget):
             btns.addWidget(b)
         lay = QVBoxLayout(self)
         lay.addLayout(top_row)
+        lay.addWidget(self.quick_steps)
         lay.addLayout(form)
         lay.addLayout(btns)
         lay.addWidget(self.status)
