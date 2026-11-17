@@ -28,7 +28,7 @@ import kotlin.random.Random
  */
 class AttractMode(private val horizon: Float = 0.55f) {
 
-    enum class Era(val label: String) { NEON("1987 · NEON"), DIGITIZED("1994 · DIGITIZED"), POLYGON("1999 · POLYGON"), HD("2006 · HD") }
+    enum class Era(val label: String) { NEON("NEON"), DIGITIZED("DIGITIZED"), POLYGON("POLYGON"), HD("HD") }
 
     // ------------------------------------------------------------------ characters (original designs)
     private class Sprite(val rows: List<String>, val palette: Map<Char, Color>) {
