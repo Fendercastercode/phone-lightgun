@@ -25,6 +25,11 @@ data class SavedHost(
     // position fix (ARCore can't restore its old coordinate frame from a picture alone).
     val locationName: String = "",
     val locationThumbB64: String = "",
+    // Tutorial progress for THIS pc specifically. Forgetting a pc and re-adding it, or switching
+    // to a different pc that was never walked through, both naturally start from an empty set -
+    // no special-case reset needed, it's just a fresh SavedHost row.
+    val tutorialDone: Boolean = false,
+    val tutorialSteps: Set<String> = emptySet(),
 ) {
     val pairing get() = Pairing.parse(uri)
     val ip get() = pairing?.host ?: "?"
@@ -34,12 +39,14 @@ data class SavedHost(
     fun toJson() = JSONObject().put("id", id).put("uri", uri).put("name", name).put("displayId", displayId)
         .put("displayLabel", displayLabel).put("sizeKnown", sizeKnown).put("calibratedDisplay", calibratedDisplay)
         .put("lastUsed", lastUsed).put("locationName", locationName).put("locationThumbB64", locationThumbB64)
+        .put("tutorialDone", tutorialDone).put("tutorialSteps", JSONArray(tutorialSteps.toList()))
 
     companion object {
         fun fromJson(o: JSONObject) = SavedHost(o.getString("id"), o.getString("uri"), o.optString("name"),
             o.optString("displayId").ifEmpty { null }, o.optString("displayLabel"), o.optBoolean("sizeKnown"),
             o.optString("calibratedDisplay").ifEmpty { null }, o.optLong("lastUsed"),
-            o.optString("locationName"), o.optString("locationThumbB64"))
+            o.optString("locationName"), o.optString("locationThumbB64"), o.optBoolean("tutorialDone"),
+            o.optJSONArray("tutorialSteps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet())
     }
 }
 

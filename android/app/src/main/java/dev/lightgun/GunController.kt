@@ -421,6 +421,33 @@ class GunController private constructor(private val app: Context) : SensorEventL
         return h.locationName to bmp
     }
 
+    // ---------------------------------------------------------------- per-pc tutorial progress
+    // Kept on the SavedHost row, not in a phone-wide setting: switching to a different pc, or
+    // forgetting one and re-adding it, lands on a fresh row with nothing marked done, so the
+    // tutorial naturally treats that as "new" instead of staying stuck on whatever the phone did
+    // with some other pc. `settings.tutorialDone`/`tutorialSteps` remain as the phone-wide
+    // fallback for stages reached before any pc is selected (e.g. "welcome").
+    fun hostTutorialDone(): Boolean = hostId?.let { settings.hosts.get(it)?.tutorialDone } ?: false
+    fun hostTutorialSteps(): Set<String> = hostId?.let { settings.hosts.get(it)?.tutorialSteps } ?: emptySet()
+
+    fun markHostTutorialDone(done: Boolean) {
+        val hid = hostId
+        if (hid == null) settings.tutorialDone = done
+        else settings.hosts.update(hid) { it.copy(tutorialDone = done) }
+    }
+
+    fun addHostTutorialStep(id: String) {
+        val hid = hostId
+        if (hid == null) settings.tutorialSteps = settings.tutorialSteps + id
+        else settings.hosts.update(hid) { it.copy(tutorialSteps = it.tutorialSteps + id) }
+    }
+
+    /** Wipes this pc's tutorial progress (used by "restart tutorial"); the phone-wide fallback too. */
+    fun resetTutorial() {
+        settings.tutorialSteps = emptySet(); settings.tutorialDone = false
+        hostId?.let { hid -> settings.hosts.update(hid) { it.copy(tutorialSteps = emptySet(), tutorialDone = false) } }
+    }
+
     private fun handleHost(msg: JSONObject) {
         calib.onHostMessage(msg)
         when (msg.optString("type")) {

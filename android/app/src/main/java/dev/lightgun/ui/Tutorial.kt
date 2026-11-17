@@ -115,7 +115,10 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
             "Still nothing to lock onto? Print a marker and stick it on the wall near the TV - a " +
                 "fool-proof fallback anchor for rooms with nothing else to track."),
         waiting = "Finding anchor points in the room...", skippable = false,
-        live = { g -> g.aim.tracking && !g.aim.gyroOnly },
+        // No `live` check here on purpose: the point of this step is to show the player what's
+        // being tracked *right now* and let them confirm/save it, so it shouldn't be able to
+        // flag itself ALREADY DONE and offer an instant skip just because tracking happened to
+        // already be live from whatever the camera was pointed at before this step opened.
         done = { g, _ -> g.aim.tracking && !g.aim.gyroOnly && g.aim.features >= 40 }),
 
     Stage("measure", "Measure your TV", "MEASURE YOUR TV", Neon.Cyan,
@@ -217,7 +220,11 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     var index by rememberSaveable { mutableIntStateOf(0) }
     var cleared by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
-    var doneOnce by remember { mutableStateOf(gun.settings.tutorialSteps) }
+    // Keyed on hostId: switching to a different pc (or forgetting one and re-adding it, which
+    // lands on a brand new SavedHost row) re-reads that pc's own progress instead of whatever
+    // was marked done for some other pc. Unioned with the phone-wide set so stages reached
+    // before any pc was selected (just "welcome", in practice) are never lost by that switch.
+    var doneOnce by remember(gun.hostId) { mutableStateOf(gun.settings.tutorialSteps + gun.hostTutorialSteps()) }
     var coach by remember { mutableStateOf(gun.coach.state) }
     LaunchedEffect(Unit) { while (true) { coach = gun.coach.state; delay(80) } }
     var camThumb by remember { mutableStateOf<Bitmap?>(null) }
@@ -230,10 +237,13 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     val alreadyDone = statuses[index] == Status.DONE && !cleared
     val missing = list.filterIndexed { i, st -> st.need == Need.REQUIRED && statuses[i] != Status.DONE }
 
-    fun finish() { gun.settings.tutorialDone = true; onFinish() }
+    fun finish() { gun.markHostTutorialDone(true); onFinish() }
     fun go(i: Int) { cleared = false; showHelp = false; index = i.coerceIn(0, list.lastIndex) }
     fun next() = if (index < list.lastIndex) go(index + 1) else finish()
-    fun markDone(id: String) { doneOnce = doneOnce + id; gun.settings.tutorialSteps = doneOnce }
+    fun markDone(id: String) { doneOnce = doneOnce + id; gun.addHostTutorialStep(id) }
+    // New PC, new room, or just want a clean run: forget every step was ever done instead of
+    // the player having to remove their PC as a workaround to force a fresh walkthrough.
+    fun restart() { gun.resetTutorial(); doneOnce = emptySet(); go(0) }
 
     // Poll the completion condition; on success flash STAGE CLEAR, click, advance.
     LaunchedEffect(index) {
@@ -260,7 +270,7 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     }
 
     Column(Modifier.fillMaxSize().background(Neon.Night)) {
-        Header(list, statuses, index, missing.map { it.short }, onJump = ::go, onExit = ::finish)
+        Header(list, statuses, index, missing.map { it.short }, onJump = ::go, onExit = ::finish, onRestart = ::restart)
         if (gun.newScreen) WarningBanner("NEW SCREEN (${gun.displayLabel}) - MEASURE YOUR TV AND LOCK ON AGAIN",
             Modifier.padding(horizontal = 10.dp, vertical = 2.dp))
         Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
@@ -351,7 +361,8 @@ private fun body(size: TextUnit, color: Color) =
 
 @Composable
 private fun Header(list: List<Stage>, statuses: List<Status>, index: Int, missing: List<String>,
-                   onJump: (Int) -> Unit, onExit: () -> Unit) {
+                   onJump: (Int) -> Unit, onExit: () -> Unit, onRestart: () -> Unit) {
+    var confirmRestart by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(Color(0xFF14062E)).padding(horizontal = 10.dp, vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ChromeTitle("HOW TO PLAY", 16.sp)
@@ -371,6 +382,9 @@ private fun Header(list: List<Stage>, statuses: List<Status>, index: Int, missin
                 }
             }
             Spacer(Modifier.weight(1f))
+            ArcadeButton(if (confirmRestart) "TAP AGAIN TO RESTART" else "RESTART TUTORIAL",
+                { if (confirmRestart) { confirmRestart = false; onRestart() } else confirmRestart = true },
+                small = true, color = if (confirmRestart) Neon.Orange else Neon.Dim)
             ArcadeButton("EXIT", onExit, small = true, color = Neon.Dim)
         }
         Text(if (missing.isEmpty()) "\u2713 READY TO PLAY! The rest is practice - tap any box to try it."
