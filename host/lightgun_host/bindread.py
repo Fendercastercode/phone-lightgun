@@ -316,7 +316,7 @@ def ra_key(name: str) -> str | None:
 
 
 def ra_gun_port(rp, cfg: dict) -> int:
-    content, core_path = emucheck._ra_last_content(rp.playlists)
+    content, core_path = emucheck._ra_current_content(rp)
     cur = {k: v for k, v in cfg.items() if k.startswith("input_libretro_device_p")}
     if content and core_path:
         core = emucheck._ra_core_name(rp.info, core_path)
@@ -348,7 +348,7 @@ def ra_bind(cfg: dict, port: int, func: str) -> tuple[str | None, str]:
 def ra_effective_cfg(rp, cfg: dict | None = None) -> dict:
     """retroarch.cfg with the loaded core's and game's override files on top, as RetroArch layers them."""
     cfg = dict(cfg if cfg is not None else emucheck._read_kv(rp.cfg, "="))
-    content, core_path = emucheck._ra_last_content(rp.playlists)
+    content, core_path = emucheck._ra_current_content(rp, cfg)
     if core_path:
         core = emucheck._ra_core_name(rp.info, core_path)
         cfg.update(emucheck._read_kv(rp.overrides / core / f"{core}.cfg", "="))
@@ -359,7 +359,7 @@ def ra_effective_cfg(rp, cfg: dict | None = None) -> dict:
 
 
 def ra_core(rp) -> str:
-    content, core_path = emucheck._ra_last_content(rp.playlists)
+    content, core_path = emucheck._ra_current_content(rp)
     return emucheck._ra_core_name(rp.info, core_path) if core_path else ""
 
 

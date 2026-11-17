@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,7 +107,7 @@ def _ra_core_name(info_dir: Path, core_path: str) -> str:
     return info.get("corename", "")
 
 
-def _ra_last_content(playlists: Path):
+def _ra_history(playlists: Path) -> list:
     for p in (playlists / "builtin" / "content_history.lpl", playlists / "content_history.lpl",
               playlists.parent / "content_history.lpl"):
         try:
@@ -113,8 +115,75 @@ def _ra_last_content(playlists: Path):
         except (OSError, ValueError):
             continue
         if items:
-            return items[0].get("path", ""), items[0].get("core_path", "")
-    return "", ""
+            return items
+    return []
+
+
+def _ra_last_content(playlists: Path):
+    """Most recently played game (history), whether or not it's running now."""
+    items = _ra_history(playlists)
+    return (items[0].get("path", ""), items[0].get("core_path", "")) if items else ("", "")
+
+
+def ra_network_cmd_on(cfg: dict) -> bool:
+    return cfg.get("network_cmd_enable", "false").lower() == "true"
+
+
+_status_cache: dict = {}
+
+
+def ra_status(cfg: dict):
+    """What RetroArch says is running right now, via its network command port:
+    ("PLAYING" | "PAUSED", game) or ("CONTENTLESS", ""). None when it can't be asked (network
+    commands off, or RetroArch not running). Cached ~1 s: several readers ask every tick."""
+    if not ra_network_cmd_on(cfg):
+        return None
+    try:
+        port = int(cfg.get("network_cmd_port", "55355") or 55355)
+    except ValueError:
+        port = 55355
+    now = time.monotonic()
+    hit = _status_cache.get(port)
+    if hit and now - hit[0] < 1.0:
+        return hit[1]
+    result = None
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0.15)
+            s.connect(("127.0.0.1", port))   # connected: a closed port fails fast instead of timing out
+            s.send(b"GET_STATUS\n")
+            reply = s.recv(4096).decode("utf-8", "replace").strip()
+        parts = reply.split(" ", 2)
+        if len(parts) >= 2 and parts[0] == "GET_STATUS":
+            if parts[1] == "CONTENTLESS":
+                result = ("CONTENTLESS", "")
+            elif len(parts) == 3:
+                # "GET_STATUS PLAYING <core>,<game file name without extension>,crc32=..."
+                fields = parts[2].split(",")
+                result = (parts[1], fields[1] if len(fields) > 1 else "")
+    except OSError:
+        result = None
+    _status_cache[port] = (now, result)
+    return result
+
+
+def _ra_current_content(rp, cfg: dict | None = None):
+    """(content path, core path) of the game RetroArch is running *right now*. Asks RetroArch
+    itself when network commands are on, so a new game (or going back to the menu) is picked up
+    straight away; otherwise falls back to the newest history entry - which stays on the last
+    game played even after RetroArch is closed or a different game is started without history."""
+    cfg = cfg if cfg is not None else _read_kv(rp.cfg, "=")
+    status = ra_status(cfg)
+    if status is None:
+        return _ra_last_content(rp.playlists)
+    state, game = status
+    if state == "CONTENTLESS" or not game:
+        return "", ""
+    for it in _ra_history(rp.playlists):
+        path = it.get("path", "")
+        if Path(path.replace("\\", "/")).stem == game:
+            return path, it.get("core_path", "")
+    return _ra_last_content(rp.playlists)
 
 
 def check_retroarch(exe: Path) -> EmuStatus:
@@ -130,8 +199,26 @@ def check_retroarch(exe: Path) -> EmuStatus:
         # "raw" drops mouse input made by programs (it only reads real devices): the phone needs dinput
         st.checks.append(Check(drv == "dinput", f"input driver = {drv or '?'}",
                                "Settings > Drivers > Input = dinput (raw ignores the phone's mouse)"))
-    content, core_path = _ra_last_content(rp.playlists)
+    # Without network commands RetroSight can only guess the game from RetroArch's history,
+    # which stays on the last game played - even after RetroArch is closed or another is started.
+    st.checks.append(Check(ra_network_cmd_on(cfg), "RetroArch tells RetroSight which game is running"
+                           if ra_network_cmd_on(cfg) else "RetroArch can't tell RetroSight which game is running",
+                           "Settings > Network > Network Commands = ON (Fix does this) - otherwise a new "
+                           "game isn't picked up and the last one played is shown"))
+    if cfg.get("history_list_enable", "true").lower() == "false":
+        st.checks.append(Check(False, "RetroArch history is off",
+                               "Settings > Playlists > History = ON (needed to find the loaded game's core)"))
+    status = ra_status(cfg)
+    content, core_path = _ra_current_content(rp, cfg)
     core = _ra_core_name(rp.info, core_path) if core_path else ""
+    if status is not None and status[0] == "CONTENTLESS":
+        st.checks.append(Check(False, "no game running right now", "Load a game, then look here again"))
+        return st
+    if ra_network_cmd_on(cfg) and status is None:
+        # network commands are on but nothing answered: RetroArch isn't running. Don't present the
+        # last game played as if it were on screen.
+        st.checks.append(Check(False, "RetroArch isn't running a game", "Start RetroArch and load a game"))
+        return st
     if not content or not core:
         st.checks.append(Check(False, "no game loaded yet", "Load a game, then look here again"))
         return st

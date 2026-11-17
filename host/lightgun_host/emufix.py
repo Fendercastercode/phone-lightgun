@@ -457,7 +457,7 @@ def plan_retroarch(exe: str) -> FixPlan:
         return plan
     cfg_path = rp.cfg
     cfg = emucheck._read_kv(cfg_path, "=")
-    content, core_path = emucheck._ra_last_content(rp.playlists)
+    content, core_path = emucheck._ra_current_content(rp, cfg)
     if not content or not core_path:
         plan.notes.append("Load the game in RetroArch once, then fix again (the fix is per game).")
         return plan
@@ -519,6 +519,10 @@ def plan_retroarch(exe: str) -> FixPlan:
     # Windows: "raw" only reads real mice and drops the phone's (tested: no crosshair, no shots)
     if sys.platform == "win32" and cfg.get("input_driver") != "dinput":
         binds["input_driver"] = "dinput"
+    # lets RetroSight ask RetroArch which game is running (GET_STATUS on localhost), so a new
+    # game is picked up instead of the history's last-played entry
+    if not emucheck.ra_network_cmd_on(cfg):
+        binds["network_cmd_enable"] = "true"
     need = {k: v for k, v in binds.items() if cfg.get(k) != v}
     if mame_core:
         # the MAME core reads the RetroPad too, so its Start/Coin changes would break the gun cores:

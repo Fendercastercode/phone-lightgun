@@ -66,3 +66,66 @@ def test_retroarch_gun_port_outside_lightgun_class(tmp_path, monkeypatch):
 
 def test_unknown_program():
     assert emucheck.check(r"C:\Windows\explorer.exe") is None
+
+
+def _ra_with_history(ra, port):
+    (ra / "retroarch.exe").write_bytes(b"")
+    (ra / "retroarch.cfg").write_text(f'input_driver = "dinput"\nnetwork_cmd_enable = "true"\n'
+                                      f'network_cmd_port = "{port}"\n')
+    (ra / "info").mkdir()
+    (ra / "info" / "genesis_plus_gx_libretro.info").write_text('corename = "Genesis Plus GX"\n')
+    (ra / "playlists" / "builtin").mkdir(parents=True)
+    (ra / "playlists" / "builtin" / "content_history.lpl").write_text(json.dumps({"items": [
+        {"path": r"C:\roms\Old Game.bin", "core_path": r"C:\ra\cores\genesis_plus_gx_libretro.dll"},
+        {"path": r"C:\roms\Lethal Enforcers.bin", "core_path": r"C:\ra\cores\genesis_plus_gx_libretro.dll"}]}))
+
+
+def _fake_retroarch(reply: bytes):
+    """A one-shot RetroArch network command port answering GET_STATUS with [reply]."""
+    import socket
+    import threading
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(("127.0.0.1", 0))
+    s.settimeout(2)
+
+    def serve():
+        try:
+            data, addr = s.recvfrom(64)
+            if data.startswith(b"GET_STATUS"):
+                s.sendto(reply, addr)
+        except OSError:
+            pass
+        finally:
+            s.close()
+    threading.Thread(target=serve, daemon=True).start()
+    return s.getsockname()[1]
+
+
+def test_retroarch_follows_the_running_game_not_the_history(tmp_path):
+    emucheck._status_cache.clear()
+    port = _fake_retroarch(b"GET_STATUS PLAYING Genesis Plus GX,Lethal Enforcers,crc32=1234abcd\n")
+    _ra_with_history(tmp_path, port)
+    st = emucheck.check(str(tmp_path / "retroarch.exe"))
+    assert st.game == "Lethal Enforcers"     # not "Old Game", the newest history entry
+
+
+def test_retroarch_menu_without_a_game(tmp_path):
+    emucheck._status_cache.clear()
+    port = _fake_retroarch(b"GET_STATUS CONTENTLESS\n")
+    _ra_with_history(tmp_path, port)
+    st = emucheck.check(str(tmp_path / "retroarch.exe"))
+    assert st.game == ""
+    assert any("no game running" in c.text for c in st.problems)
+
+
+def test_retroarch_closed_does_not_show_the_last_game(tmp_path):
+    import socket
+    emucheck._status_cache.clear()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()                                 # nothing listening there now
+    _ra_with_history(tmp_path, port)
+    st = emucheck.check(str(tmp_path / "retroarch.exe"))
+    assert st.game == ""
+    assert any("isn't running a game" in c.text for c in st.problems)
