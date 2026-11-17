@@ -313,10 +313,24 @@ class HostWindow(QWidget):
         c = self.calibs.get(gid)
         if c is None:
             m = self.monitor
+            def _send(msg, g=gid):
+                self.rx.send_ctrl(g, msg)
+                self._on_calib_msg(msg)
             c = self.calibs[gid] = Calibrator(self.store, m.id, m.w, m.h,
-                                              lambda msg, g=gid: self.rx.send_ctrl(g, msg), self.overlay,
+                                              _send, self.overlay,
                                               lambda on, g=gid: self.injector.set_enabled(on, g))
         return c
+
+    def _on_calib_msg(self, msg: dict):
+        """Keep the Screen size fields in sync whenever a flow measures/re-measures the
+        screen (A, D, Q) or just confirms the known one (B, C) - they only ever go stale
+        otherwise, since calibration writes straight to the store, not through these spin boxes."""
+        if msg.get("type") != "calib_result" or not msg.get("ok") or "screen" not in msg:
+            return
+        screen = msg["screen"]
+        self.w_spin.setValue(screen["w_m"])
+        self.h_spin.setValue(screen["h_m"])
+        self.diag_spin.setValue(math.hypot(screen["w_m"], screen["h_m"]) / 0.0254)
 
     def _apply_players(self):
         """Player 2+: own buttons, and on Windows/macOS aim through a virtual gamepad."""
