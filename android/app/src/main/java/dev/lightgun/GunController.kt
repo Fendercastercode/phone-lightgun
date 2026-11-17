@@ -106,6 +106,13 @@ class GunController private constructor(private val app: Context) : SensorEventL
     /** Pairing code that joins another phone to this PC as the next player. */
     fun invite(player: Int): String? = settings.pairing?.copy(gunId = player - 1)?.toUri()
 
+    /** True while the player has handed the PC's mouse back (the PC ignores the gun until it's turned back on). */
+    @Volatile var mousePaused = false
+    fun freeMouse(paused: Boolean) {
+        if (mousePaused == paused) return
+        mousePaused = paused
+        link?.sendCtrl(JSONObject().put("type", "mouse_pause").put("on", paused))
+    }
     fun requestEmuFix() {
         emuFixResult = "Fixing..."
         link?.sendCtrl(JSONObject().put("type", "emu_fix"))

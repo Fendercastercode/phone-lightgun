@@ -336,8 +336,21 @@ class HostWindow(QWidget):
                 self._on_calib_msg(msg)
             c = self.calibs[gid] = Calibrator(self.store, m.id, m.w, m.h,
                                               _send, self.overlay,
-                                              lambda on, g=gid: self.injector.set_enabled(on, g))
+                                              lambda on, g=gid: self.injector.set_enabled(on, g),
+                                              self._pause_game)
         return c
+
+    def _pause_game(self, pause: bool):
+        """Barrel recalibration: freeze RetroArch while the targets are up, resume afterwards.
+        Only resumes a pause we made ourselves. Other emulators just have their input held and
+        the overlay covers them (no pause command that is safe to send blindly)."""
+        if pause:
+            exe = getattr(self._emu, "exe", None) if self._emu else None
+            self._paused_exe = exe if exe and "retroarch" in os.path.basename(str(exe)).lower() \
+                and emucheck.ra_set_paused(str(exe), True) else None
+        elif getattr(self, "_paused_exe", None):
+            emucheck.ra_set_paused(self._paused_exe, False)
+            self._paused_exe = None
 
     def _on_calib_msg(self, msg: dict):
         """Keep the Screen size fields in sync whenever a flow measures/re-measures the
@@ -842,6 +855,7 @@ class HostWindow(QWidget):
         t = msg.get("type")
         if t == "hello":
             self.active_gun = gid
+            self.injector.set_user_paused(gid, False)   # a fresh connection starts with the gun on
             self.store.data["paired_once"] = True
             self.store.save()
             if self.overlay.mode == "qr":
@@ -858,6 +872,11 @@ class HostWindow(QWidget):
                     self.overlay.show_message(f"PLAYER {gid + 1} JOINED", seconds=3)
         elif t == "ping":
             self.last_ping = msg.get("stats", {})
+        elif t == "mouse_pause":   # phone's MOUSE button: free the real mouse, or take it back
+            paused = bool(msg.get("on"))
+            self.injector.set_user_paused(gid, paused)
+            self.overlay.show_message("Gun paused - the mouse is yours" if paused else "Gun back on",
+                                      seconds=2)
         elif t == "trim":      # after a quick lock-on: one shot at the centre target fine-tunes the aim
             if msg.get("on"):
                 self._trim_since[gid] = time.monotonic()
@@ -871,6 +890,7 @@ class HostWindow(QWidget):
                     self.overlay.hide()                  # hands the focus back to the game
         elif t == "bye":   # the phone forgot this pc (or is disconnecting) - clear it right away
             self.rx.guns.pop(gid, None)
+            self.injector.set_user_paused(gid, False)
             if gid in self._joined:
                 self._joined.discard(gid)
                 self._apply_players()

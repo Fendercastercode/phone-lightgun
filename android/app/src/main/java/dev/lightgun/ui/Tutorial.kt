@@ -201,7 +201,9 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
         "Last step: start a game on the PC. The PC app spots the emulator and game by itself.",
         listOf("On the PC, open RetroArch (or MAME, etc.) and load a light-gun game, full screen.",
             "The PC window shows if the emulator isn't seeing the gun - click FIX there (or tap FIX in PLAY).",
-            "RetroArch: after a fix, load the game again. Then tap PLAY!"),
+            "RetroArch: after a fix, load the game again. Then tap PLAY!",
+            "Aim feels off later? In PLAY tap RECALIBRATE. It pauses the game and shows targets on the TV.",
+            "Need the PC mouse? In PLAY tap FREE MOUSE, then GUN ON when you're done."),
         Art.GAME, success = "Shots land where you aim in the game.",
         stuck = listOf("Switched games? Just load the new one - the PC follows it (RetroArch needs Network Commands on; FIX turns it on).",
             "Other emulators: see host/presets.md in the RetroSight folder on your PC."),
@@ -223,6 +225,8 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                    onScanQr: () -> Unit, onFinish: () -> Unit) {
     val list = remember(onScanQr) { stages(onScanQr) }
     var index by rememberSaveable { mutableIntStateOf(0) }
+    // Which instruction of the stage is on screen: one at a time, never the whole list.
+    var sub by rememberSaveable { mutableIntStateOf(0) }
     var cleared by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     // Keyed on hostId: switching to a different pc (or forgetting one and re-adding it, which
@@ -247,7 +251,18 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     val missing = list.filterIndexed { i, st -> st.need == Need.REQUIRED && statuses[i] != Status.DONE }
 
     fun finish() { gun.markHostTutorialDone(true); onFinish() }
-    fun go(i: Int) { cleared = false; showHelp = false; index = i.coerceIn(0, list.lastIndex) }
+    fun go(i: Int, atEnd: Boolean = false) {
+        cleared = false; showHelp = false
+        index = i.coerceIn(0, list.lastIndex)
+        sub = if (atEnd) list[index].steps.lastIndex else 0
+    }
+    val lastSub = stage.steps.lastIndex
+    val subShown = sub.coerceIn(0, lastSub)
+    // once a calibration is actually running, the player is past the instructions: show the last one
+    LaunchedEffect(cal.phase) {
+        if (cal.phase == Phase.SHOOTING || cal.phase == Phase.SCANNING) sub = lastSub
+    }
+    fun back() { if (subShown > 0) sub = subShown - 1 else if (index > 0) go(index - 1, atEnd = true) }
     fun next() = if (index < list.lastIndex) go(index + 1) else finish()
     fun markDone(id: String) { doneOnce = doneOnce + id; gun.addHostTutorialStep(id) }
     // New PC, new room, or just want a clean run: forget every step was ever done instead of
@@ -298,15 +313,24 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                         if (alreadyDone) Text("\u2713 ALREADY DONE - redo it if you like, or tap NEXT",
                             Modifier.fillMaxWidth().background(Color(0xFF0E3A12)).padding(8.dp), style = arcade(12.sp, Neon.Lime))
                         RetroPanel(stage.title, accent = if (alreadyDone) Neon.Lime else stage.color) {
-                            Text(stage.goal, style = body(15.sp, stage.color))
-                            Spacer(Modifier.height(6.dp))
-                            stage.steps.forEachIndexed { i, line ->
-                                Row(Modifier.padding(vertical = 3.dp)) {
-                                    Box(Modifier.size(24.dp).background(stage.color, CircleShape), Alignment.Center) {
-                                        Text("${i + 1}", style = arcade(12.sp, Neon.Night))
+                            if (subShown == 0) {
+                                Text(stage.goal, style = body(13.sp, stage.color))
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            Row(verticalAlignment = Alignment.Top) {
+                                Box(Modifier.size(30.dp).background(stage.color, CircleShape), Alignment.Center) {
+                                    Text("${subShown + 1}", style = arcade(14.sp, Neon.Night))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(stage.steps[subShown], style = body(18.sp, Neon.White))
+                            }
+                            if (lastSub > 0) {
+                                Spacer(Modifier.height(8.dp))
+                                Row {
+                                    stage.steps.indices.forEach { i ->
+                                        Box(Modifier.padding(end = 4.dp).size(if (i == subShown) 10.dp else 7.dp)
+                                            .background(if (i <= subShown) stage.color else Neon.Dim, CircleShape))
                                     }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(line, style = body(14.sp, Neon.White))
                                 }
                             }
                         }
@@ -332,8 +356,10 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                         ArcadeButton("JOIN A FRIEND'S GAME", { onScanQr() }, small = true, color = Neon.Cyan)
                     if (stage.stuck.isNotEmpty())
                         ArcadeButton(if (showHelp) "HIDE HELP" else "STUCK?", { showHelp = !showHelp }, small = true, color = Neon.Orange)
-                    if (index > 0) ArcadeButton("\u25C0 BACK", { go(index - 1) }, small = true, color = Neon.Dim)
-                    if (alreadyDone || stage.skippable)
+                    if (index > 0 || subShown > 0) ArcadeButton("\u25C0 BACK", { back() }, small = true, color = Neon.Dim)
+                    if (subShown < lastSub)
+                        ArcadeButton("NEXT \u25B6", { sub = subShown + 1 }, small = true, color = stage.color)
+                    else if (alreadyDone || stage.skippable)
                         ArcadeButton(if (alreadyDone) "NEXT \u25B6" else "SKIP", { next() }, small = true,
                             color = if (alreadyDone) Neon.Lime else Neon.Dim)
                 }
@@ -391,43 +417,23 @@ private fun Header(list: List<Stage>, statuses: List<Status>, index: Int, missin
     var confirmRestart by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(Color(0xFF14062E)).padding(horizontal = 10.dp, vertical = 5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ChromeTitle("HOW TO PLAY", 16.sp)
-            Spacer(Modifier.width(10.dp))
-            // one chip per step: tap to jump
-            list.forEachIndexed { i, st ->
-                val s = statuses[i]
-                val c = when (s) { Status.DONE -> Neon.Lime; Status.CURRENT -> Neon.Yellow
-                    Status.NEEDED -> if (st.need == Need.RECOMMENDED) Neon.Orange else Neon.Red; Status.OPTIONAL -> Neon.Dim }
-                val selected = i == index
-                Box(Modifier.padding(horizontal = 2.dp).size(if (selected) 36.dp else 30.dp)
-                    .background(if (s == Status.DONE) c else Neon.Night)
-                    .bevel(c, if (selected) 3.dp else 2.dp)
-                    .clickable { onJump(i) }, Alignment.Center) {
-                    Text(if (s == Status.DONE) "\u2713" else "${i + 1}",
-                        style = arcade(if (selected) 14.sp else 12.sp, if (s == Status.DONE) Neon.Night else c))
-                }
-            }
+            ChromeTitle("STEP ${index + 1} OF ${list.size}", 16.sp)
             Spacer(Modifier.weight(1f))
-            ArcadeButton(if (confirmRestart) "TAP AGAIN TO RESTART" else "RESTART TUTORIAL",
+            ArcadeButton(if (confirmRestart) "TAP AGAIN TO RESTART" else "RESTART",
                 { if (confirmRestart) { confirmRestart = false; onRestart() } else confirmRestart = true },
                 small = true, color = if (confirmRestart) Neon.Orange else Neon.Dim)
             ArcadeButton("EXIT", onExit, small = true, color = Neon.Dim)
         }
-        Text(if (missing.isEmpty()) "\u2713 READY TO PLAY! The rest is practice - tap any box to try it."
-             else "TO PLAY YOU STILL NEED: " + missing.joinToString("  \u2022  "),
-            style = arcade(11.sp, if (missing.isEmpty()) Neon.Lime else Neon.Yellow, weight = FontWeight.Bold))
-        Row {
-            Legend(Neon.Lime, "done"); Legend(Neon.Red, "needed to play"); Legend(Neon.Orange, "recommended")
-            Legend(Neon.Dim, "optional practice")
+        // one thin segment per step (tap to jump): green = done, yellow = here
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            list.forEachIndexed { i, _ ->
+                val c = when { i == index -> Neon.Yellow; statuses[i] == Status.DONE -> Neon.Lime; else -> Neon.Dim }
+                Box(Modifier.weight(1f).height(8.dp).background(c).clickable { onJump(i) })
+            }
         }
-    }
-}
-
-@Composable
-private fun Legend(c: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
-        Box(Modifier.size(9.dp).background(c))
-        Text(" $label", style = arcade(9.sp, Neon.Dim, weight = FontWeight.Bold))
+        if (missing.isNotEmpty())
+            Text("Still needed to play: " + missing.joinToString(", "), Modifier.padding(top = 3.dp),
+                style = arcade(10.sp, Neon.Dim, weight = FontWeight.Bold))
     }
 }
 
@@ -452,7 +458,6 @@ private fun StatusBar(stage: Stage, cal: CalibrationController.State, cleared: B
                 Text(line, style = body(14.sp, Neon.White))
             }
         }
-        Text("WORKED WHEN: ${stage.success}", Modifier.padding(top = 4.dp), style = body(12.sp, Neon.Lime))
     }
 }
 

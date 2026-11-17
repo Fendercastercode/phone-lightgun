@@ -78,7 +78,9 @@ class Session:
 
 class Calibrator:
     def __init__(self, store, display_id: str, w_px: int, h_px: int,
-                 send: Callable[[dict], None], ui: CalibUI, set_injection: Callable[[bool], None]):
+                 send: Callable[[dict], None], ui: CalibUI, set_injection: Callable[[bool], None],
+                 pause_game: Callable[[bool], None] | None = None):
+        self.pause_game = pause_game          # best-effort: freeze the emulator while the targets are up
         self.store = store
         self.display_id = display_id
         self.w_px, self.h_px = w_px, h_px
@@ -114,6 +116,8 @@ class Calibrator:
         self.ui.show_message(ui_text, seconds=seconds)
         self.s = None
         self.set_injection(True)
+        if self.pause_game:
+            self.pause_game(False)
 
     def _log_attempt(self, flow, r):
         log.info("flow %s attempt: ok=%s rms_px=%.2f p80_px=%s rms_mm=%s width=%s msg=%s", flow, r.ok, r.rms_px,
@@ -168,6 +172,8 @@ class Calibrator:
         if flow == "B" and self.screen is None:
             return self._error("B", "measure your TV first (MEASURE YOUR TV), then do this step again")
         self.set_injection(False)
+        if flow == "B" and self.pause_game:
+            self.pause_game(True)
         if flow == "Q":
             self.s = Session("Q", [], barrel)
             self.send({"type": "calib_progress", "flow": "Q", "fraction": 0.0, "views": 0,

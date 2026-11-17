@@ -108,6 +108,7 @@ class Injector:
         self.gun_output: dict[int, str] = {}       # per-gun override of `output` (player 2+)
         self.gun_buttons: dict[int, tuple] = {}    # per-gun (buttons, offscreen_trigger)
         self.paused_guns: set[int] = set()         # guns whose input is held during their calibration
+        self.user_paused: set[int] = set()         # guns the player released so the real mouse is free
         self.last_move = None         # (t, x_px, y_px) of the last cursor move we sent
         self._last_t: dict[int, float] = {}        # gun -> time of its last packet
         self._presses: dict[int, int] = {}         # gun -> press counters we have acted on
@@ -118,6 +119,20 @@ class Injector:
             self.buttons, self.offscreen_trigger, self.output = buttons, offscreen_trigger, output
             if gamepad is not None:
                 self.gamepad = gamepad
+
+    def set_user_paused(self, gun_id: int, paused: bool):
+        """The player handed the mouse back (phone's MOUSE button): stop moving the cursor and
+        clicking for this gun until they hand it back. Separate from calibration pauses so a
+        calibration finishing can't switch the mouse back on."""
+        with self._lock:
+            if paused:
+                self.user_paused.add(gun_id)
+                for (gid, bit), act in list(self._held.items()):
+                    if gid == gun_id:
+                        self._do(gid, act, False)
+                        del self._held[(gid, bit)]
+            else:
+                self.user_paused.discard(gun_id)
 
     def set_enabled(self, on: bool, gun_id: int | None = None):
         with self._lock:
@@ -227,7 +242,7 @@ class Injector:
             if now - self._mon_checked > MONITOR_REFRESH_S:
                 self._mon_checked = now
                 self._refresh_monitor()
-            if not self.enabled or pkt.gun_id in self.paused_guns:
+            if not self.enabled or pkt.gun_id in self.paused_guns or pkt.gun_id in self.user_paused:
                 self._prev[pkt.gun_id] = pkt.buttons
                 self._presses[pkt.gun_id] = pkt.presses   # presses while paused (calibration) aren't missed
                 return

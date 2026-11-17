@@ -171,6 +171,31 @@ def ra_status(cfg: dict):
     return result
 
 
+def ra_set_paused(exe: str, pause: bool) -> bool:
+    """Pause or resume the game running in RetroArch (network command PAUSE_TOGGLE, only sent
+    when its state differs from what's wanted, so it can never flip it the wrong way). Returns
+    True when RetroArch was actually toggled. Needs Network Commands on."""
+    rp = emulocate.retroarch_paths(Path(exe), _read_kv)
+    if rp is None:
+        return False
+    cfg = _read_kv(rp.cfg, "=")
+    _status_cache.clear()
+    status = ra_status(cfg)
+    if status is None or status[0] not in ("PLAYING", "PAUSED") or (status[0] == "PAUSED") == pause:
+        return False
+    try:
+        port = int(cfg.get("network_cmd_port", "55355") or 55355)
+    except ValueError:
+        port = 55355
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.sendto(b"PAUSE_TOGGLE", ("127.0.0.1", port))
+    except OSError:
+        return False
+    _status_cache.clear()
+    return True
+
+
 def _ra_current_content(rp, cfg: dict | None = None):
     """(content path, core path) of the game RetroArch is running *right now*. Asks RetroArch
     itself when network commands are on, so a new game (or going back to the menu) is picked up

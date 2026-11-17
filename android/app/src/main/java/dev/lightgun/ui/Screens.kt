@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -314,7 +315,7 @@ private fun defaultPlayLayout(triggerOnRight: Boolean): Map<String, ButtonRect> 
 
 @Composable
 private fun PlayScreen(gun: GunController, aim: AimState, cal: CalibrationController.State, onNavigate: (Route) -> Unit) {
-    DisposableEffect(Unit) { gun.playing = true; onDispose { gun.playing = false; gun.endTrim() } }
+    DisposableEffect(Unit) { gun.playing = true; onDispose { gun.playing = false; gun.endTrim(); gun.freeMouse(false) } }
     // every quick lock-on in Play (PLAY tap, after the phone was put down/slept) ends with one
     // centre-target shot that trims the remaining offset, then the game is back
     var seenSeq by remember { mutableStateOf(gun.calib.resultSeq) }
@@ -417,6 +418,9 @@ private fun EmuChip(gun: GunController, onOpen: () -> Unit) {
         else -> "${st.emu.uppercase()}: ${st.problems.size} PROBLEM${if (st.problems.size > 1) "S" else ""} ▸" to Neon.Red
     }
     ArcadeButton(text, onOpen, small = true, color = color)
+    if (st != null && st.game.isNotEmpty())
+        Text("LOADED: " + st.game.uppercase(), maxLines = 2, textAlign = TextAlign.Center,
+            style = arcade(10.sp, if (st.problems.isEmpty()) Neon.Lime else Neon.Orange, weight = FontWeight.Bold))
     gun.inputEcho?.takeIf { System.currentTimeMillis() - it.third < 2500 }?.let { (b, sent) ->
         Text("$b → ${sent.uppercase()}", style = arcade(10.sp, Neon.Yellow, glow = Neon.Orange))
     }
@@ -525,6 +529,10 @@ private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.St
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             when {
+                gun.mousePaused -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("MOUSE FREED", style = arcade(16.sp, Neon.Cyan, glow = Neon.Cyan))
+                    Text("THE GUN IS OFF - TAP GUN ON TO PLAY", style = arcade(9.sp, Neon.White))
+                }
                 gun.newScreen && !gun.calib.active -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("NEW SCREEN!", style = arcade(18.sp, Neon.Red, glow = Neon.Red))
                     Text("CALIBRATION NEEDED - TAP MENU", style = arcade(10.sp, Neon.White))
@@ -536,6 +544,23 @@ private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.St
                     }
                     Text("FINE-TUNES THE AIM - ONE SHOT", style = arcade(9.sp, Neon.White))
                     ArcadeButton("SKIP", { gun.endTrim() }, small = true, color = Neon.Dim)
+                }
+                gun.calib.active && cal.flow == "B" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("RECALIBRATING - GAME PAUSED", style = arcade(12.sp, Neon.Magenta, glow = Neon.Magenta))
+                    Blink(1200) { a ->
+                        Text(cal.message.uppercase().ifEmpty { "SHOOT THE TARGETS ON THE TV" }, Modifier.alpha(0.4f + 0.6f * a),
+                            style = arcade(11.sp, Neon.Yellow, glow = Neon.Yellow))
+                    }
+                    ArcadeButton("CANCEL", { gun.cancelCalibration() }, small = true, color = Neon.Dim)
+                }
+                cal.phase == Phase.FAILED && cal.flow == "B" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("RECALIBRATE FAILED", style = arcade(14.sp, Neon.Red, glow = Neon.Red))
+                    if (cal.message.isNotEmpty()) Text(cal.message.uppercase(),
+                        style = arcade(9.sp, Neon.White, weight = FontWeight.Bold).copy(lineHeight = 13.sp))
+                    Row {
+                        ArcadeButton("TRY AGAIN", { gun.startCalibration("B") }, small = true, color = Neon.Lime)
+                        ArcadeButton("KEEP OLD", { gun.cancelCalibration() }, small = true, color = Neon.Dim)
+                    }
                 }
                 gun.calib.active -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Blink(1200) { a ->
@@ -577,6 +602,13 @@ private fun Hud(gun: GunController, aim: AimState, cal: CalibrationController.St
                     ArcadeButton("RESET", onResetLayout, small = true, color = Neon.Orange)
                     ArcadeButton("DONE", onToggleEditLayout, small = true, color = Neon.Lime)
                 } else {
+                    // pauses the game, the PC shows the barrel targets, then it's back to the game
+                    if (aim.connected && !gun.newScreen && !gun.calib.active && !gun.trimming)
+                        ArcadeButton("RECALIBRATE", { gun.startCalibration("B") }, small = true, color = Neon.Magenta)
+                    if (aim.connected)
+                        ArcadeButton(if (gun.mousePaused) "GUN ON" else "FREE MOUSE",
+                            { gun.freeMouse(!gun.mousePaused) }, small = true,
+                            color = if (gun.mousePaused) Neon.Lime else Neon.Cyan)
                     ArcadeButton("MENU", { onNavigate(Route.CALIBRATE) }, small = true, color = Neon.Dim)
                     ArcadeButton("LAYOUT", onToggleEditLayout, small = true, color = Neon.Dim)
                     if (gun.player == 1 && aim.connected) ArcadeButton("+P2", onInvite, small = true, color = Neon.Cyan)
