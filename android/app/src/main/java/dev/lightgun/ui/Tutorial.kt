@@ -1,5 +1,7 @@
 package dev.lightgun.ui
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -104,7 +111,9 @@ private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
         Art.FLOOR, need = Need.REQUIRED, pane = Pane.CAMERA, success = "The meter is full and it says LOCKED ONTO THE ROOM.",
         stuck = listOf("Turn on a light - in a dark room the camera can't see any anchor points.",
             "Plain white walls and ceilings have no anchor points. Aim at the floor, a rug, a shelf or furniture.",
-            "Wipe the camera lens."),
+            "Wipe the camera lens.",
+            "Still nothing to lock onto? Print a marker and stick it on the wall near the TV - a " +
+                "fool-proof fallback anchor for rooms with nothing else to track."),
         waiting = "Finding anchor points in the room...", skippable = false,
         live = { g -> g.aim.tracking && !g.aim.gyroOnly },
         done = { g, _ -> g.aim.tracking && !g.aim.gyroOnly && g.aim.features >= 40 }),
@@ -211,6 +220,11 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     var doneOnce by remember { mutableStateOf(gun.settings.tutorialSteps) }
     var coach by remember { mutableStateOf(gun.coach.state) }
     LaunchedEffect(Unit) { while (true) { coach = gun.coach.state; delay(80) } }
+    var camThumb by remember { mutableStateOf<Bitmap?>(null) }
+    DisposableEffect(Unit) {
+        gun.setThumbnailListener { camThumb = it }
+        onDispose { gun.setThumbnailListener(null) }
+    }
     val stage = list[index.coerceIn(0, list.lastIndex)]
     val statuses = list.mapIndexed { i, st -> statusOf(st, i, index, gun, doneOnce) }
     val alreadyDone = statuses[index] == Status.DONE && !cleared
@@ -227,7 +241,10 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
         val base = Baseline(a.shots, a.offscreenReloads, a.flicks, a.recenters, gun.calib.resultSeq)
         cleared = false
         var since = 0L
-        val holdMs = if (stage.pane == Pane.CAMERA) 1000L else 0L
+        // Camera check lingers longer than other auto-clearing steps: it's easy to already be
+        // tracking well when this step opens, and the player should actually see the picture of
+        // what it locked onto, not have the step blink past before they notice it ran at all.
+        val holdMs = if (stage.pane == Pane.CAMERA) 2500L else 0L
         while (true) {
             if (stage.done(gun, base)) {
                 if (since == 0L) since = System.currentTimeMillis()
@@ -302,7 +319,7 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
                     when {
                         stage.pane == Pane.COACH && coach.active ->
                             ScanCoachView(coach, cal.progress.toFloat(), Modifier.fillMaxSize().background(Color(0xFF0A0118)).padding(6.dp))
-                        stage.pane == Pane.CAMERA -> CameraMeter(aim, Modifier.fillMaxSize())
+                        stage.pane == Pane.CAMERA -> CameraMeter(gun, aim, camThumb, Modifier.fillMaxSize())
                         stage.pane == Pane.FIRE -> Column(Modifier.fillMaxSize()) {
                             TutorialArt(stage.art, Modifier.weight(1f).fillMaxWidth())
                             ArcadeZone("FIRE!", "OR PRESS VOLUME DOWN", Neon.Red, Modifier.weight(1f).fillMaxWidth(),
@@ -400,13 +417,55 @@ private fun StatusBar(stage: Stage, cal: CalibrationController.State, cleared: B
 }
 
 @Composable
-private fun CameraMeter(aim: AimState, modifier: Modifier) {
+private fun CameraMeter(gun: GunController, aim: AimState, thumb: Bitmap?, modifier: Modifier) {
+    val locked = aim.tracking && aim.features >= 40
+    var showSave by remember { mutableStateOf(false) }
+    val saved = remember(showSave) { gun.savedLocation() }   // re-read right after a save closes the popup
     Column(modifier.background(Color(0xFF0A0118)).bevel(Neon.Dim, 2.dp).padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        TutorialArt(Art.FLOOR, Modifier.weight(1f).fillMaxWidth())
+        // This IS the live picture the camera is using - not an illustration - so the player can
+        // see exactly what it locked onto, not just trust a progress bar.
+        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+            if (thumb != null) Image(thumb.asImageBitmap(), "what the camera is tracking",
+                Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            else TutorialArt(Art.FLOOR, Modifier.fillMaxSize())
+        }
         Text("ANCHOR POINTS: ${aim.features}", style = arcade(18.sp, if (aim.features >= 40) Neon.Lime else Neon.Orange))
         SegmentBar((aim.features / 40f).coerceIn(0f, 1f), Modifier.fillMaxWidth().padding(vertical = 6.dp))
         Text(if (aim.tracking) "LOCKED ONTO THE ROOM" else "SEARCHING... (${aim.failure?.replace('_', ' ')?.lowercase() ?: "point at the room"})",
             style = body(13.sp, if (aim.tracking) Neon.Cyan else Neon.Orange))
+        if (locked && thumb != null)
+            ArcadeButton("SAVE THIS LOCATION", { showSave = true }, small = true, color = Neon.Cyan)
+        saved?.let { (name, savedThumb) ->
+            Spacer(Modifier.height(6.dp))
+            Text(if (name.isNotEmpty()) "LAST TIME: \"${name.uppercase()}\"" else "A SAVED LOCATION IS ON FILE",
+                style = body(10.sp, Neon.Dim))
+            Image(savedThumb.asImageBitmap(), "saved location", Modifier.fillMaxWidth().height(60.dp),
+                contentScale = ContentScale.Fit)
+        }
+    }
+    if (showSave && thumb != null) SaveLocationPopup(saved?.first ?: "") { name ->
+        if (name != null) gun.saveLocation(name, thumb)
+        showSave = false
+    }
+}
+
+/** Names the spot the player is standing/aiming from right now, so a future "camera check" can
+ *  show it back to them ("match this picture") instead of starting from nothing. */
+@Composable
+private fun SaveLocationPopup(initial: String, onDone: (String?) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
+    PopupFrame("SAVE THIS LOCATION", Neon.Cyan, { onDone(null) }) {
+        Text("Give this spot a name (\"COUCH\", \"BEDROOM\") so you can tell it apart from others on this PC.",
+            style = body(12.sp, Neon.White))
+        Spacer(Modifier.height(6.dp))
+        BasicTextField(name, { name = it }, singleLine = true, textStyle = arcade(13.sp, Neon.Yellow),
+            cursorBrush = SolidColor(Neon.Yellow),
+            modifier = Modifier.fillMaxWidth().background(Color.Black).padding(8.dp))
+        Spacer(Modifier.height(6.dp))
+        Row {
+            ArcadeButton("SAVE", { onDone(name.ifBlank { "SAVED SPOT" }) }, color = Neon.Lime)
+            ArcadeButton("CANCEL", { onDone(null) }, small = true, color = Neon.Dim)
+        }
     }
 }

@@ -2,6 +2,8 @@ package dev.lightgun
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -397,6 +399,27 @@ class GunController private constructor(private val app: Context) : SensorEventL
     }
 
     fun setThumbnailListener(l: ((Bitmap) -> Unit)?) { engine.thumbnailListener = l }
+
+    // ---------------------------------------------------------------- saved locations
+    // A memory aid, not a real position fix: lets the player name a physical spot and keep a
+    // picture of what the camera locked onto there, so they can match it up next time instead of
+    // guessing where to stand. A printed marker stuck near the TV is the fool-proof fallback for
+    // rooms that don't track well at all; this is for everyone else, to cut down on fumbling.
+    fun saveLocation(name: String, thumb: Bitmap) {
+        val bytes = java.io.ByteArrayOutputStream().apply { thumb.compress(Bitmap.CompressFormat.PNG, 100, this) }.toByteArray()
+        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        hostId?.let { hid -> settings.hosts.update(hid) { it.copy(locationName = name, locationThumbB64 = b64) } }
+    }
+
+    fun savedLocation(): Pair<String, Bitmap>? {
+        val h = hostId?.let { settings.hosts.get(it) } ?: return null
+        if (h.locationThumbB64.isEmpty()) return null
+        val bmp = try {
+            val bytes = Base64.decode(h.locationThumbB64, Base64.NO_WRAP)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) { null } ?: return null
+        return h.locationName to bmp
+    }
 
     private fun handleHost(msg: JSONObject) {
         calib.onHostMessage(msg)

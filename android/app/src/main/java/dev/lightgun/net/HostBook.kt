@@ -20,6 +20,11 @@ data class SavedHost(
     val sizeKnown: Boolean = false,
     val calibratedDisplay: String? = null,
     val lastUsed: Long = 0L,
+    // What the room looked like to the camera right after it last locked onto it here, plus a
+    // name the player gave that spot - a memory aid for "stand about here again", not a real
+    // position fix (ARCore can't restore its old coordinate frame from a picture alone).
+    val locationName: String = "",
+    val locationThumbB64: String = "",
 ) {
     val pairing get() = Pairing.parse(uri)
     val ip get() = pairing?.host ?: "?"
@@ -28,12 +33,13 @@ data class SavedHost(
 
     fun toJson() = JSONObject().put("id", id).put("uri", uri).put("name", name).put("displayId", displayId)
         .put("displayLabel", displayLabel).put("sizeKnown", sizeKnown).put("calibratedDisplay", calibratedDisplay)
-        .put("lastUsed", lastUsed)
+        .put("lastUsed", lastUsed).put("locationName", locationName).put("locationThumbB64", locationThumbB64)
 
     companion object {
         fun fromJson(o: JSONObject) = SavedHost(o.getString("id"), o.getString("uri"), o.optString("name"),
             o.optString("displayId").ifEmpty { null }, o.optString("displayLabel"), o.optBoolean("sizeKnown"),
-            o.optString("calibratedDisplay").ifEmpty { null }, o.optLong("lastUsed"))
+            o.optString("calibratedDisplay").ifEmpty { null }, o.optLong("lastUsed"),
+            o.optString("locationName"), o.optString("locationThumbB64"))
     }
 }
 
