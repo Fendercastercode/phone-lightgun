@@ -86,7 +86,7 @@ private fun result(g: GunController, b: Baseline, flow: String) =
 
 private fun stages(onScanQr: () -> Unit): List<Stage> = listOf(
     Stage("welcome", "Welcome", "WELCOME!", Neon.Yellow,
-        "Your phone is about to become a light gun for games on your PC.",
+        "Your phone is about to become a light gun.",
         listOf("This takes about 5 minutes, one step at a time.",
             "Most steps finish by themselves as soon as you've done them.",
             "The boxes along the top show what's done (green \u2713) and what you still need (red)."),
