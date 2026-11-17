@@ -163,9 +163,10 @@ class Calibrator:
         barrel = Barrel.from_dict(msg["barrel"]) if msg.get("barrel") else Barrel()
         fit_t = bool(msg.get("fit_t", False))
         if flow in "BCQ" and self.size_m is None:
-            return self._error(flow, "screen size unknown: run flow A, or enter the size on the host")
+            return self._error(flow, "screen size unknown: measure your TV first (CALIBRATE > MEASURE YOUR TV), "
+                                     "or enter its size in the PC window")
         if flow == "B" and self.screen is None:
-            return self._error("B", "scan the TV first (stage A) in this session, then run B")
+            return self._error("B", "measure your TV first (MEASURE YOUR TV), then do this step again")
         self.set_injection(False)
         if flow == "Q":
             self.s = Session("Q", [], barrel)
@@ -212,7 +213,7 @@ class Calibrator:
                 return self._error("C", r.message)
             if r.rms_px > MAX_RMS_FRACTION * w_px:
                 return self._error("C", f"shots disagree by {r.rms_px:.0f} px - aim carefully and hold the phone "
-                                        f"the way you calibrated the barrel (B)")
+                                        f"the same way as in HOLD IT LIKE A GUN")
             self.screen = r.screen
             self._finish({"type": "calib_result", "flow": "C", "ok": True, "rms_px": r.rms_px,
                           "screen": r.screen.to_dict(), "message": f"RMS {r.rms_px:.1f} px"},

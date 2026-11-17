@@ -158,9 +158,13 @@ def ra_status(cfg: dict):
             if parts[1] == "CONTENTLESS":
                 result = ("CONTENTLESS", "")
             elif len(parts) == 3:
-                # "GET_STATUS PLAYING <core>,<game file name without extension>,crc32=..."
-                fields = parts[2].split(",")
-                result = (parts[1], fields[1] if len(fields) > 1 else "")
+                # "GET_STATUS PLAYING nes,Wild Gunman (World),crc32=d8798f09" (RetroArch 1.22):
+                # <system>,<game file name without extension>,crc32=<hex>. Game names often contain
+                # commas ("Addams Family, The (USA)"), so only strip the system prefix and crc suffix.
+                game = parts[2].partition(",")[2]
+                if ",crc32=" in game:
+                    game = game.rsplit(",crc32=", 1)[0]
+                result = (parts[1], game)
     except OSError:
         result = None
     _status_cache[port] = (now, result)

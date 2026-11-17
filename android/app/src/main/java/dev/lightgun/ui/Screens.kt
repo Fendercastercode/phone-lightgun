@@ -129,8 +129,8 @@ private fun TopBar(route: Route, a: AimState, onNavigate: (Route) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Neon.Night.copy(alpha = 0.96f)).padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Column {
-            ChromeTitle("LIGHT", 14.sp)
-            ChromeTitle("GUN ✦", 14.sp)
+            ChromeTitle("RETRO", 14.sp)
+            ChromeTitle("SIGHT ✦", 14.sp)
         }
         Spacer(Modifier.width(6.dp))
         Route.entries.forEach { r ->
