@@ -10,6 +10,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
+/**
+ * The host sends display ids as "<device>:<w>x<h>" (e.g. "\\.\DISPLAY1:2560x1440") - the
+ * resolution suffix changes whenever a game or emulator switches video modes, even though it's
+ * still the same physical monitor. Compare only the device part so that doesn't look like a
+ * different screen.
+ */
+fun sameMonitor(a: String, b: String) = a.substringBeforeLast(':') == b.substringBeforeLast(':')
+
 /** A PC the phone has paired with, plus what we know about its screen/calibration. */
 data class SavedHost(
     val id: String,                    // pairing key (hex): identifies the PC even if its IP changes
@@ -33,8 +41,12 @@ data class SavedHost(
 ) {
     val pairing get() = Pairing.parse(uri)
     val ip get() = pairing?.host ?: "?"
-    /** Calibrated for the screen the PC is driving now (as of the last contact). */
-    val calibrated get() = sizeKnown && displayId != null && calibratedDisplay == displayId
+    /** Calibrated for the screen the PC is driving now (as of the last contact). Compares by
+     *  monitor identity only, not the "<device>:<w>x<h>" id's resolution suffix - the host's own
+     *  screen_size() lookup already tolerates a monitor reporting a different resolution (a game
+     *  or emulator changing video modes), so this has to match or it flags a false "new screen"
+     *  every time that happens, even though the host still knows the physical screen's size. */
+    val calibrated get() = sizeKnown && displayId != null && calibratedDisplay?.let { sameMonitor(it, displayId) } == true
 
     fun toJson() = JSONObject().put("id", id).put("uri", uri).put("name", name).put("displayId", displayId)
         .put("displayLabel", displayLabel).put("sizeKnown", sizeKnown).put("calibratedDisplay", calibratedDisplay)

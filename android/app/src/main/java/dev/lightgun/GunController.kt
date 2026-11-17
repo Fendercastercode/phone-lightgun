@@ -31,6 +31,7 @@ import dev.lightgun.input.Haptics
 import dev.lightgun.net.HostLink
 import dev.lightgun.net.Pairing
 import dev.lightgun.net.Protocol
+import dev.lightgun.net.sameMonitor
 import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -461,10 +462,13 @@ class GunController private constructor(private val app: Context) : SensorEventL
             "hello_ack" -> msg.optJSONObject("display")?.let { d ->
                 val id = d.optString("id")
                 displayLabel = "${d.optInt("w_px")}x${d.optInt("h_px")}"
-                val changed = displayId != null && displayId != id         // switched while connected
+                // Compare by monitor identity, not the id's resolution suffix - a game or
+                // emulator switching video modes must not look like a brand new screen.
+                val prevDisplay = displayId
+                val changed = prevDisplay != null && !sameMonitor(prevDisplay, id)   // switched while connected
                 val saved = hostId?.let { settings.hosts.get(it) }
                 val calibratedFor = saved?.calibratedDisplay
-                val differs = calibratedFor != null && calibratedFor != id
+                val differs = calibratedFor != null && !sameMonitor(calibratedFor, id)
                 displayId = id
                 hostId?.let { hid ->
                     settings.hosts.update(hid) {
