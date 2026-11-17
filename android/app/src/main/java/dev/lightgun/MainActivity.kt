@@ -45,8 +45,13 @@ class MainActivity : ComponentActivity() {
                 route = Route.PLAY; onRouteChanged(route)
                 Toast.makeText(this, "You're player ${p.gunId + 1} - point at the TV, then press ST", Toast.LENGTH_LONG).show()
             } else if (route == Route.HOME) {
-                // a freshly added PC needs calibrating (the tutorial handles this itself)
-                route = Route.CALIBRATE; onRouteChanged(route)
+                // A freshly added pc needs the full walkthrough, not just the bare 3-step
+                // Calibrate screen - that one has no camera-check/anchor step at all, so a new
+                // pairing landing there skipped straight from "pair" to "measure the TV" with no
+                // chance to see or save what the camera locked onto. Per-pc tutorial progress
+                // (GunController.hostTutorialSteps) means this is a real fresh run for this pc
+                // even if other pcs already finished it.
+                route = Route.TUTORIAL; onRouteChanged(route)
             }
         } else if (r.contents != null) {
             Toast.makeText(this, "Not a light-gun pairing code", Toast.LENGTH_LONG).show()
@@ -76,9 +81,12 @@ class MainActivity : ComponentActivity() {
             LightGunApp(gun, route, onNavigate = { route = it; onRouteChanged(it) }, onScanQr = ::scanQr,
                 onUseHost = { h ->
                     if (gun.hostId != h.id || gun.link?.connected != true) h.pairing?.let { gun.connect(it) }
-                    // calibrated PC + screen: straight to PLAY (quick lock-on runs automatically)
+                    // calibrated PC + screen: straight to PLAY (quick lock-on runs automatically).
+                    // Not calibrated yet (never finished setup, or typed in its pairing code
+                    // instead of scanning it): the full walkthrough, same reasoning as a fresh
+                    // QR pairing above - not the bare Calibrate screen, which has no camera-check.
                     if (h.calibrated) gun.lockOnPlay = true   // always re-lock on the TV, then play
-                    route = if (h.calibrated) Route.PLAY else Route.CALIBRATE
+                    route = if (h.calibrated) Route.PLAY else Route.TUTORIAL
                     onRouteChanged(route)
                 })
         }
