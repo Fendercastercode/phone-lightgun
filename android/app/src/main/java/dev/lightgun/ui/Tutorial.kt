@@ -222,9 +222,13 @@ fun TutorialScreen(gun: GunController, aim: AimState, cal: CalibrationController
     var showHelp by remember { mutableStateOf(false) }
     // Keyed on hostId: switching to a different pc (or forgetting one and re-adding it, which
     // lands on a brand new SavedHost row) re-reads that pc's own progress instead of whatever
-    // was marked done for some other pc. Unioned with the phone-wide set so stages reached
-    // before any pc was selected (just "welcome", in practice) are never lost by that switch.
-    var doneOnce by remember(gun.hostId) { mutableStateOf(gun.settings.tutorialSteps + gun.hostTutorialSteps()) }
+    // was marked done for some other pc - or for NO pc, before one was ever selected. The
+    // phone-wide set is used ONLY while no pc is selected yet (just "welcome", in practice):
+    // once a pc exists, its own steps are the whole story, never unioned with the phone-wide
+    // set - that set accumulates across every pc ever paired with this phone (including ones
+    // from before this per-pc tracking existed), so unioning it in here would make a brand new
+    // pc look like it already finished steps it never actually ran for THIS pc.
+    var doneOnce by remember(gun.hostId) { mutableStateOf(if (gun.hostId == null) gun.settings.tutorialSteps else gun.hostTutorialSteps()) }
     var coach by remember { mutableStateOf(gun.coach.state) }
     LaunchedEffect(Unit) { while (true) { coach = gun.coach.state; delay(80) } }
     var camThumb by remember { mutableStateOf<Bitmap?>(null) }
