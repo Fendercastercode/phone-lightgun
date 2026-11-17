@@ -216,8 +216,12 @@ class GunController private constructor(private val app: Context) : SensorEventL
     @Volatile var hot = false
         private set
 
+    /** Tears down the live link to the PC (if any) and lets it know, so its status clears right
+     *  away instead of just going quiet for a few seconds. */
     fun disconnect() {
+        link?.sendCtrl(JSONObject().put("type", "bye"))
         link?.close(); link = null
+        hostId = null
     }
 
     /** Start tracking + streaming (Calibrate/Play screens). Camera permission must be granted. */

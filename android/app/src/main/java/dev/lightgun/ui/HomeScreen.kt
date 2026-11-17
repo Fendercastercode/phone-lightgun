@@ -126,7 +126,10 @@ fun HomeScreen(gun: GunController, aim: AimState, onScanQr: () -> Unit, onUse: (
                     onClose = { popup = null },
                     onUse = { popup = null; onUse(h) },
                     onRecalibrate = { popup = null; onRecalibrate(h) },
-                    onForget = { gun.settings.hosts.forget(h.id); hosts = gun.settings.hosts.all(); popup = null },
+                    onForget = {
+                        if (gun.hostId == h.id) gun.disconnect()   // it's the live pc: actually drop the link, not just the list entry
+                        gun.settings.hosts.forget(h.id); hosts = gun.settings.hosts.all(); popup = null
+                    },
                     onInvite = { popup = Popup.Invite })
             } ?: run { popup = null }
             Popup.Add -> AddPopup(onClose = { popup = null },

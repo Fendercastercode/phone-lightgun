@@ -840,6 +840,12 @@ class HostWindow(QWidget):
                 self.injector.set_enabled(True, gid)
                 if self.overlay.mode == "targets":
                     self.overlay.hide()                  # hands the focus back to the game
+        elif t == "bye":   # the phone forgot this pc (or is disconnecting) - clear it right away
+            self.rx.guns.pop(gid, None)
+            if gid in self._joined:
+                self._joined.discard(gid)
+                self._apply_players()
+            self.overlay.show_message(f"PLAYER {gid + 1} DISCONNECTED" if gid > 0 else "PHONE DISCONNECTED", seconds=2)
         elif t == "emu_fix":   # "FIX IT" tapped on the phone
             allowed = self.allow_phone_fix.isChecked()
             if not allowed:  # the person at the PC decides
