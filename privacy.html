@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RetroSight Privacy Policy</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1b26; --dim: #5b5870; --line: #e3e1ec; --link: #3a4fd8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121019; --fg: #ece9ff; --dim: #a7a2c8; --line: #2c2750; --link: #8fa0ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 0 16px 48px; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 40px 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .meta { color: var(--dim); margin: 0 0 24px; }
+  a { color: var(--link); }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>RetroSight Privacy Policy</h1>
+<p class="meta">Effective date: 26 November 2026 · Applies to the RetroSight Android app (com.retrosight.app) and the RetroSight PC app</p>
+
+<p>RetroSight turns your Android phone into a light gun for games running on your own computer. This policy explains what information the apps use and where it goes. The short version: <strong>we do not collect, store or sell any of your personal data.</strong> Everything stays on your phone and on your own PC, on your own network.</p>
+
+<h2>What we collect</h2>
+<p>Nothing. RetroSight has no accounts, no sign-in, no advertising, no analytics and no crash-reporting service. The developer has no server that receives data from the apps.</p>
+
+<h2>Camera</h2>
+<p>The phone app uses the camera to track the room, find your TV and scan the pairing code on your PC. Camera images are processed on the phone, in real time. RetroSight never uploads them, and never sends them to the PC: the PC only receives numbers (where you are aiming, and where the on-screen lock-on squares were seen).</p>
+<p><strong>The one picture RetroSight can keep, and only if you turn it on:</strong> with <em>Options &gt; Privacy &gt; Keep a small picture of my play spot</em> switched on (it is off by default), the app keeps one small, low-resolution, black-and-white snapshot of what the camera tracks where you stand, so it can show it next time and you can stand in the same place. It is stored only inside the app on your phone, is never sent to the PC or anywhere else, is not included in bug reports, and is not backed up. Turning the option off deletes it, as does removing that PC in the app, clearing the app's data or uninstalling.</p>
+<p>Tracking uses <strong>Google Play Services for AR (ARCore)</strong>, which is provided by Google LLC and governed by the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. RetroSight does not use ARCore's cloud features (Cloud Anchors and the Geospatial API), which are the features Google documents as sending camera images to Google's servers. Google states that ARCore itself collects device identifiers, performance and usage data; see <a href="https://developers.google.com/ar/data-privacy">Google's ARCore data privacy page</a>.</p>
+
+<h2>What goes between your phone and your PC</h2>
+<p>The phone talks directly to the RetroSight PC app on your local network (Wi-Fi), or over Bluetooth if you use that mode. Nothing is sent through the internet or to the developer. What is sent:</p>
+<ul>
+  <li>Aim position, button presses and settings needed to play.</li>
+  <li>Your phone's model name, so the PC can tell phones apart.</li>
+  <li>The phone app's own diagnostic log (for example tracking quality and errors), which the PC saves in its settings folder so you can see what went wrong in a session.</li>
+</ul>
+<p>Pairing uses a QR code shown on your PC. The pairing key stays on your two devices and is used to protect the connection.</p>
+
+<h2>Information stored on your devices</h2>
+<ul>
+  <li><strong>Phone:</strong> your settings, the PCs you have paired with and their addresses, and calibration data. This is removed when you uninstall the app or clear its data.</li>
+  <li><strong>PC:</strong> settings, paired phones, a list of recently played games, logs and calibration data, in the RetroSight settings folder. You can delete that folder at any time.</li>
+</ul>
+
+<h2>Internet use by the PC app</h2>
+<p>The PC app reaches the internet in only two cases, and sends no personal information:</p>
+<ul>
+  <li>To show box art for your games, it downloads cover images from the public libretro thumbnail service (thumbnails.libretro.com). The request contains the game's title, like any web image request.</li>
+  <li>To read MAME's default button layout, it may download a public file from MAME's GitHub repository.</li>
+</ul>
+<p>These services are run by third parties and have their own policies.</p>
+
+<h2>Bug reports</h2>
+<p>If you choose to send a bug report, the PC app saves a zip of logs to your computer. Nothing is sent automatically: you decide whether to email it. If you do, we use it only to fix the problem and delete it when it is no longer needed. You can ask us to delete it at any time.</p>
+
+<h2>Permissions the phone app asks for</h2>
+<ul>
+  <li><strong>Camera:</strong> room and TV tracking, and scanning the pairing QR code.</li>
+  <li><strong>Network and Wi-Fi:</strong> finding and talking to your PC on the local network.</li>
+  <li><strong>Bluetooth:</strong> the optional Bluetooth pointer mode.</li>
+  <li><strong>Vibration, sensors, wake lock, notifications and foreground service:</strong> recoil feedback, accurate aiming, keeping the connection running while you play, and showing that it is running.</li>
+  <li><strong>Display over other apps:</strong> only for an optional mode where a phone or tablet is used as the game screen, to draw the aim marker over it.</li>
+</ul>
+
+<h2>Children</h2>
+<p>RetroSight is not directed at children under 13 and does not knowingly collect information from anyone, including children.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the new version will be posted on this page with a new effective date.</p>
+
+<h2>Contact</h2>
+<p>Questions or requests: <a href="mailto:dmarder26@gmail.com">dmarder26@gmail.com</a></p>
+</main>
+</body>
+</html>

@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RetroSight</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="RetroSight turns your Android phone into a light gun for retro games on your PC and any flat TV. No CRT, no sensor bar, no IR lights.">
+<link rel="icon" href="assets/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: one arcade floor at night - a neon cabinet hero over a perspective grid, then
+   "machines" (video cabinets), an instruction card, a loadout grid and a spec sheet. Dark only, by choice. */
+:root {
+  color-scheme: dark;
+  --night: #0f0a24;      /* the cabinet art's own background */
+  --night-2: #1a1038;
+  --panel: #150e30;
+  --neon: #3dff6e;       /* cabinet green */
+  --hot: #ff2d55;        /* RETRO red, player 1 gun */
+  --cyan: #3ee6ff;       /* player 2 gun, horizon */
+  --magenta: #ff3ccf;    /* crosshair ring */
+  --gold: #ffd23f;       /* coin / score text */
+  --violet: #b07cff;
+  --text: #e9e6ff;
+  --dim: #a59fd0;
+  --line: #34265f;
+  --pixel: "Press Start 2P", "Courier New", monospace;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--night); color: var(--text);
+  font: 16px/1.65 var(--mono);
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ff3ccf' stroke-width='3'/%3E%3Cpath d='M16 1v8M16 23v8M1 16h8M23 16h8' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2' fill='white'/%3E%3C/svg%3E") 16 16, crosshair;
+  overflow-x: hidden;
+}
+a, button { cursor: inherit; }
+/* CRT scanlines over everything, very faint */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px);
+  mix-blend-mode: multiply;
+}
+.wrap { max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--pixel); font-weight: 400; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(18px, 3.2vw, 28px); line-height: 1.5; color: var(--gold); text-shadow: 0 0 14px rgba(255,210,63,.45); }
+h3 { font-size: 12px; line-height: 1.7; letter-spacing: .04em; }
+p { margin: 0; }
+.eyebrow { font-family: var(--pixel); font-size: 10px; letter-spacing: .12em; color: var(--cyan); text-transform: uppercase; }
+:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+/* ---------- top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: rgba(15,10,36,.92);
+  border-bottom: 2px solid var(--line); backdrop-filter: blur(6px); }
+.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 12px; }
+.brand { font-family: var(--pixel); font-size: 13px; text-decoration: none; color: var(--hot); white-space: nowrap; }
+.brand span { color: var(--violet); }
+.top nav { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; justify-content: flex-end; }
+.top nav a { font-family: var(--pixel); font-size: 9px; color: var(--dim); text-decoration: none; letter-spacing: .06em; }
+.top nav a:hover { color: var(--neon); }
+@media (max-width: 640px) { .top nav { display: none; } }
+
+/* ---------- hero */
+.hero { position: relative; overflow: hidden; isolation: isolate;
+  background: radial-gradient(ellipse at 30% 35%, #2a1452 0%, var(--night) 62%); }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: center; gap: 24px;
+  padding-block: 40px 120px; position: relative; }
+.horizon { position: absolute; left: 0; right: 0; bottom: 96px; height: 2px; background: var(--cyan);
+  box-shadow: 0 0 16px var(--cyan); }
+.floor { position: absolute; left: -30%; right: -30%; bottom: -4px; height: 100px; z-index: 0;
+  background-image: linear-gradient(rgba(192,58,223,.42) 2px, transparent 2px), linear-gradient(90deg, rgba(192,58,223,.42) 2px, transparent 2px);
+  background-size: 64px 24px; transform: perspective(280px) rotateX(58deg); transform-origin: bottom;
+  animation: floor 1.6s linear infinite; }
+@keyframes floor { to { background-position: 0 24px, 0 0; } }
+.hero h1 { font-size: clamp(38px, 7.4vw, 84px); line-height: 1.12; color: var(--hot); text-shadow: 0 0 22px rgba(255,45,85,.55); }
+.hero h1 span { display: block; background: linear-gradient(#d06bff, #5fc8ff); -webkit-background-clip: text; background-clip: text;
+  color: transparent; text-shadow: none; filter: drop-shadow(0 0 14px rgba(150,120,255,.45)); }
+.tagline { font-family: var(--pixel); font-size: clamp(13px, 1.9vw, 19px); line-height: 1.8; color: var(--gold);
+  margin-top: 26px; text-shadow: 0 0 10px rgba(255,210,63,.4); }
+.sub { color: var(--cyan); font-size: 18px; margin-top: 14px; max-width: 34ch; }
+.ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+.btn { font-family: var(--pixel); font-size: 11px; line-height: 1.4; letter-spacing: .05em; text-decoration: none;
+  padding: 15px 18px; border: 3px solid currentColor; color: var(--neon); background: rgba(61,255,110,.06);
+  box-shadow: 0 0 14px rgba(61,255,110,.35), inset 0 0 10px rgba(61,255,110,.15); display: inline-block; }
+.btn:hover { background: var(--neon); color: var(--night); }
+.btn.alt { color: var(--cyan); background: rgba(62,230,255,.06); box-shadow: 0 0 14px rgba(62,230,255,.3); }
+.btn.alt:hover { background: var(--cyan); color: var(--night); }
+.coin { margin-top: 26px; font-family: var(--pixel); font-size: 11px; color: var(--hot); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- a cabinet with a video in its screen.
+   The art is 1024 x 1024 with the cabinet (and its glow) in x 250-774, y 100-920; the box shows just that
+   part, and the screen is at x 384-640, y 345-553 of the art. All the percentages below come from those. */
+.cab { position: relative; width: 100%; max-width: 100%; aspect-ratio: 524 / 820; margin: 0 auto; overflow: clip; }
+.cab > img { position: absolute; left: -47.71%; top: -12.2%; width: 195.42%; height: 124.88%; max-width: none;
+  mix-blend-mode: lighten; pointer-events: none; }
+.screen { position: absolute; left: 25.57%; top: 29.88%; width: 48.85%; height: 25.37%; border-radius: 9% / 11%;
+  overflow: hidden; background: #071207; z-index: 2; border: 0; padding: 0; display: block; }
+.screen video, .screen iframe { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; }
+.screen::after { /* glass: curve and scanlines */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 35% 25%, rgba(255,255,255,.10), transparent 55%),
+              repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.28) 2px 3px);
+  box-shadow: inset 0 0 18px rgba(0,0,0,.8); }
+/* attract mode while a slot has no video yet */
+.attract { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.attract .ch { width: 46%; aspect-ratio: 1; position: relative; animation: drift 4.5s ease-in-out infinite; }
+.attract .ch::before { content: ""; position: absolute; inset: 16%; border-radius: 50%; border: 3px solid var(--magenta); }
+.attract .ch::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(#fff,#fff) center / 3px 28% no-repeat, linear-gradient(90deg,#fff,#fff) center / 28% 3px no-repeat; }
+@keyframes drift { 0%,100% { transform: translate(-18%, -8%); } 33% { transform: translate(16%, 6%); } 66% { transform: translate(-6%, 14%); } }
+.attract .lbl { position: absolute; bottom: 7%; left: 0; right: 0; white-space: nowrap; font-family: var(--pixel); font-size: clamp(6px, 1vw, 9px);
+  color: var(--gold); animation: blink 1.4s steps(1) infinite; }
+.cab .play { position: absolute; left: 50%; top: 85.4%; transform: translate(-50%, -50%); z-index: 3; font-family: var(--pixel);
+  font-size: clamp(7px, 1.1vw, 10px); color: var(--night); background: var(--gold); padding: 6px 9px; border: 0; white-space: nowrap; }
+.cab .play[hidden] { display: none; }
+/* the cabinet's lit marquee is the sound switch (art: x 325-700, y 155-248) */
+.cab .snd { position: absolute; left: 14.3%; top: 6.7%; width: 71.6%; height: 11.3%; z-index: 3; border: 0; padding: 0;
+  background: transparent; font-family: var(--pixel); font-size: clamp(9px, 2.1vw, 15px); color: #062a10; letter-spacing: .04em; }
+.cab .snd:hover { color: #000; text-shadow: 0 0 6px #fff; }
+.cab .snd[aria-pressed="true"] { animation: none; }
+.cab .snd[aria-pressed="false"] { animation: blink 1.1s steps(1) infinite; }
+.hero .cab { max-width: 340px; }
+
+/* ---------- sections */
+section { padding-block: 84px; scroll-margin-top: 50px; }
+.head { display: grid; gap: 12px; margin-bottom: 40px; max-width: 760px; }
+.head p { color: var(--dim); font-size: 17px; }
+.stripe { background: linear-gradient(var(--night), var(--night-2) 30%, var(--night-2) 70%, var(--night)); }
+
+/* how to play: styled as a cabinet's instruction card */
+.card { border: 3px solid var(--neon); background: var(--panel); box-shadow: 0 0 24px rgba(61,255,110,.2);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.card .steps { list-style: none; margin: 0; padding: 28px; display: grid; gap: 26px; counter-reset: s; }
+.card li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 16px; counter-increment: s; }
+.card li::before { content: counter(s); font-family: var(--pixel); font-size: 20px; color: var(--night); background: var(--neon);
+  width: 44px; height: 44px; display: grid; place-items: center; }
+.card h3 { color: var(--neon); margin-bottom: 8px; }
+.card p { color: var(--dim); }
+.card .side { border-left: 3px solid var(--neon); padding: 18px; display: grid; place-items: center; }
+.card .side .cab { max-width: 280px; }
+
+/* loadout: feature grid */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.f { border: 2px solid var(--line); background: rgba(21,14,48,.7); padding: 22px; display: grid; gap: 10px; align-content: start; }
+.f h3 { color: var(--c, var(--neon)); }
+.f p { color: var(--dim); font-size: 15px; }
+.f .tag { font-family: var(--pixel); font-size: 8px; color: var(--c, var(--neon)); letter-spacing: .1em; opacity: .85; }
+.f:hover { border-color: var(--c, var(--neon)); box-shadow: 0 0 18px color-mix(in srgb, var(--c, var(--neon)) 35%, transparent); }
+
+/* emulator marquee */
+.marquee { overflow: hidden; border-block: 3px solid var(--magenta); background: #1d0b2c; padding-block: 14px; margin-top: 44px; }
+.marquee .track { display: flex; gap: 46px; width: max-content; animation: scroll 32s linear infinite; }
+.marquee span { font-family: var(--pixel); font-size: 13px; color: var(--magenta); white-space: nowrap; text-shadow: 0 0 10px rgba(255,60,207,.6); }
+.marquee span::before { content: "\25B8  "; color: var(--gold); }
+@keyframes scroll { to { transform: translateX(-50%); } }
+
+/* now playing: three machines in a row */
+.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.machine { display: grid; gap: 6px; justify-items: center; text-align: center; }
+.machine .cab { max-width: 250px; margin-bottom: 8px; }
+.machine h3 { color: var(--cyan); }
+.machine p { color: var(--dim); font-size: 14px; max-width: 30ch; }
+
+/* demo stages: a real sequence from the DEMO mode */
+.stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 34px; }
+.stage { border: 2px solid var(--line); padding: 14px; display: grid; gap: 8px; align-content: start; }
+.stage b { font-family: var(--pixel); font-size: 10px; color: var(--gold); font-weight: 400; }
+.stage span { font-size: 13px; color: var(--dim); line-height: 1.5; }
+
+/* spec sheet */
+.specs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.sheet { border: 2px solid var(--line); background: var(--panel); }
+.sheet h3 { padding: 16px 20px; border-bottom: 2px solid var(--line); color: var(--hot); }
+.sheet dl { margin: 0; padding: 8px 20px 18px; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 18px; }
+.sheet dt { font-family: var(--pixel); font-size: 9px; color: var(--cyan); padding-top: 14px; line-height: 1.8; }
+.sheet dd { margin: 0; padding-top: 10px; color: var(--text); font-size: 15px; }
+.sheet dd small { color: var(--dim); font-size: 13px; display: block; }
+
+/* get it */
+.get { text-align: center; }
+.get .head { margin-inline: auto; justify-items: center; }
+.get .ctas { justify-content: center; }
+.note { color: var(--dim); font-size: 14px; margin-top: 22px; }
+
+footer { border-top: 2px solid var(--line); padding-block: 30px 40px; color: var(--dim); font-size: 13px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; }
+footer a { color: var(--cyan); }
+
+/* big screen player */
+.big { position: fixed; inset: 0; z-index: 60; background: rgba(5,3,14,.94); display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.big .tv { width: min(1100px, 100%); aspect-ratio: 16 / 9; border: 4px solid var(--neon); box-shadow: 0 0 40px rgba(61,255,110,.35); background: #000; }
+.big .tv video, .big .tv iframe { width: 100%; height: 100%; border: 0; display: block; }
+.big .x { position: absolute; top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: var(--pixel); font-size: 11px; color: var(--night); background: var(--hot); border: 0; padding: 10px 12px; }
+
+/* shot marks: click anywhere and a hit ring pops, like the DEMO mode */
+.hit { position: fixed; z-index: 55; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; pointer-events: none;
+  border: 3px solid var(--gold); animation: hit .5s ease-out forwards; }
+@keyframes hit { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+
+@media (max-width: 900px) {
+  .hero .wrap { grid-template-columns: minmax(0, 1fr); padding-block: 28px 110px; }
+  .hero .cab { max-width: 300px; }
+  .card { grid-template-columns: minmax(0, 1fr); }
+  .card .side { border-left: 0; border-top: 3px solid var(--neon); }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row { grid-template-columns: minmax(0, 1fr); max-width: 460px; margin-inline: auto; }
+  .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .specs { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .stages { grid-template-columns: minmax(0, 1fr); }
+  .sheet dl { grid-template-columns: minmax(0, 1fr); }
+  section { padding-block: 60px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+  html { scroll-behavior: auto; }
+}
+/* ---------- intro: a 1996 homepage in a Win95-style browser that "upgrades" into this page.
+   Once per visit, skippable (click, any key), skipped entirely with reduced motion. */
+.boot { position: fixed; inset: 0; z-index: 70; background: #008080; overflow: hidden;
+  font: 12px/1.35 Tahoma, "MS Sans Serif", "Microsoft Sans Serif", Arial, sans-serif; color: #000;
+  -webkit-font-smoothing: none; cursor: default; transform-origin: 50% 50%; }
+.boot * { box-sizing: border-box; }
+.bv { background: #c0c0c0; border: 2px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; }
+.sunk { border: 2px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; background: #fff; }
+.win { position: absolute; left: 50%; top: 46%; width: min(760px, calc(100vw - 24px)); height: min(540px, calc(100% - 90px));
+  transform: translate(-50%, -50%); display: flex; flex-direction: column; padding: 3px;
+  transition: width .38s steps(6), height .38s steps(6), top .38s steps(6); }
+.boot.max .win { width: 100vw; height: calc(100% - 30px); top: calc(50% - 15px); }
+.tb { background: linear-gradient(90deg, #000080, #1084d0); color: #fff; font-weight: 700; padding: 3px 4px 3px 6px;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+.tb .ico { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid #ff3ccf; position: relative; }
+.tb .ico::after { content: ""; position: absolute; inset: 3px; background: #fff; border-radius: 50%; }
+.tb .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tb .wb { width: 16px; height: 14px; display: grid; place-items: center; font: 700 9px/1 Tahoma, Arial, sans-serif; color: #000; padding: 0; border-width: 1px; flex: none; }
+.menu { display: flex; gap: 12px; padding: 3px 6px; white-space: nowrap; overflow: hidden; }
+.menu u { text-decoration: underline; }
+.tools { display: flex; gap: 2px; padding: 3px 4px; border-top: 1px solid #808080; border-bottom: 1px solid #fff; overflow: hidden; }
+.tools span { padding: 4px 8px; text-align: center; min-width: 46px; white-space: nowrap; }
+.addr { display: flex; align-items: center; gap: 6px; padding: 3px 4px 4px; }
+.addr .sunk { flex: 1; min-width: 0; padding: 2px 4px; white-space: nowrap; overflow: hidden; }
+.view { flex: 1; min-height: 0; overflow: hidden; margin: 0 2px; background: #c0c0c0;
+  font: 16px/1.4 "Times New Roman", Times, serif; text-align: center; padding: 14px 12px; }
+.view > * { visibility: hidden; margin: 0 0 10px; }
+.view > .on { visibility: visible; }
+.view h1 { font: 700 clamp(22px, 4.6vw, 34px)/1.2 "Times New Roman", Times, serif; color: #0000ff; margin-top: 4px; }
+.view h1 em { color: #ff0000; font-style: normal; }
+.view .new { color: #ff0000; font-weight: 700; animation: blink95 .8s steps(1) infinite; }
+@keyframes blink95 { 50% { visibility: hidden; } }
+.view hr { border: 0; border-top: 2px groove #fff; height: 0; }
+.view a { color: #0000ee; text-decoration: underline; }
+.view .cons { height: 22px; max-width: 420px; margin-inline: auto; display: grid; place-items: center;
+  font: 700 12px Arial, sans-serif; color: #000; background: repeating-linear-gradient(45deg, #ffd800 0 14px, #000 14px 28px); }
+.view .cons b { background: #ffd800; padding: 1px 6px; }
+.view .ctr { display: inline-flex; gap: 2px; font: 700 15px "Courier New", monospace; }
+.view .ctr i { font-style: normal; background: #000; color: #3dff6e; padding: 0 3px; }
+.view small { font-size: 12px; }
+.view .mq { white-space: nowrap; overflow: hidden; color: #800080; font-weight: 700; }
+.view .mq span { display: inline-block; padding-left: 100%; animation: mq95 6s linear infinite; }
+@keyframes mq95 { to { transform: translateX(-100%); } }
+.status { display: flex; gap: 3px; padding: 3px 2px 0; }
+.status > div { padding: 2px 4px; white-space: nowrap; overflow: hidden; }
+.status .msg { flex: 1; min-width: 0; text-overflow: ellipsis; }
+.status .bar { width: 150px; flex: none; display: flex; gap: 2px; padding: 2px; }
+.status .bar i { width: 8px; background: #000080; visibility: hidden; }
+.status .bar i.on { visibility: visible; }
+@media (max-width: 560px) { .status .bar { width: 90px; } .tools span:nth-child(n+4) { display: none; } }
+.task { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; gap: 4px; padding: 2px 3px;
+  border-width: 2px 0 0; }
+.task .start { font-weight: 700; padding: 2px 6px; display: flex; align-items: center; gap: 5px; height: 24px; }
+.task .start .ico { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #ff2d55; position: relative; }
+.task .start .ico::after { content: ""; position: absolute; inset: 3px; background: #000; border-radius: 50%; }
+.task .job { height: 24px; padding: 3px 8px; min-width: 0; max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: repeating-conic-gradient(#c0c0c0 0 25%, #fff 0 50%) 0 0 / 2px 2px; font-weight: 700; }
+.task .skip { margin-left: auto; height: 24px; padding: 2px 10px; font: inherit; color: #000; }
+.task .clock { height: 24px; padding: 3px 10px; border: 1px solid; border-color: #808080 #fff #fff #808080; white-space: nowrap; }
+.dlg { position: absolute; left: 50%; top: 44%; width: min(360px, calc(100vw - 32px)); transform: translate(-50%, -50%); padding: 3px;
+  visibility: hidden; z-index: 2; }
+.dlg.on { visibility: visible; }
+.dlg .body { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 14px 12px 8px; }
+.dlg .i { width: 32px; height: 32px; border-radius: 50%; background: #0000ff; color: #fff; display: grid; place-items: center;
+  font: 700 20px "Times New Roman", serif; box-shadow: 1px 1px 0 #000; }
+.dlg .ff { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 14px 14px 6px; }
+.dlg .yr { font: 700 30px/1 "Courier New", monospace; color: #3dff6e; background: #000; padding: 6px 12px; letter-spacing: .08em;
+  border: 2px solid; border-color: #808080 #fff #fff #808080; font-variant-numeric: tabular-nums; }
+.dlg .ffbar { width: 100%; height: 16px; padding: 2px; }
+.dlg .ffbar i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(90deg, #000080 0 8px, transparent 8px 10px); }
+.dlg .btns { display: flex; justify-content: center; gap: 8px; padding: 6px 0 10px; }
+.dlg .btns span { min-width: 78px; text-align: center; padding: 4px 10px; }
+.dlg .btns .def { outline: 1px solid #000; outline-offset: -1px; }
+.dlg .btns .down { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 9px 3px 11px; }
+/* the upgrade: torn scanlines and colour split, then the old screen collapses like a CRT switching off */
+.boot.glitch { animation: vhs .5s ease-in both; }
+.boot.glitch::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(transparent 0 40%, rgba(255,255,255,.35) 40% 44%, transparent 44%) 0 0 / 100% 200%;
+  animation: track .5s linear both; }
+@keyframes vhs { from { filter: none; transform: none; } 50% { filter: blur(.6px) brightness(1.15); transform: translateY(-1%); }
+  to { filter: blur(1px) brightness(1.8) saturate(.6); transform: translateY(0); } }
+@keyframes track { from { background-position: 0 100%; } to { background-position: 0 -100%; } }
+.boot.off { animation: crtoff .42s cubic-bezier(.7, 0, .9, .4) both; background: #fff; }
+.boot.off > * { opacity: 0; }
+@keyframes crtoff {
+  0% { transform: scale(1, 1); filter: brightness(3); }
+  55% { transform: scale(1, .004); filter: brightness(4); }
+  100% { transform: scale(0, .004); filter: brightness(6); opacity: 0; }
+}
+body.powering main, body.powering .top { animation: poweron .7s ease-out both; }
+@keyframes poweron { from { filter: brightness(2.2) saturate(.2); transform: scale(1.04); } to { filter: none; transform: none; } }
+</style>
+</head>
+<body>
+<div class="boot" id="boot" role="presentation" hidden>
+  <div class="win bv">
+    <div class="tb"><span class="ico"></span><span class="t">RetroSight Home Page - Internet Browser</span>
+      <span class="wb bv">_</span><span class="wb bv">&#9633;</span><span class="wb bv">&#215;</span></div>
+    <div class="menu"><span><u>F</u>ile</span><span><u>E</u>dit</span><span><u>V</u>iew</span><span><u>G</u>o</span><span>F<u>a</u>vorites</span><span><u>H</u>elp</span></div>
+    <div class="tools"><span class="bv">Back</span><span class="bv">Forward</span><span class="bv">Stop</span><span class="bv">Refresh</span><span class="bv">Home</span></div>
+    <div class="addr">Address <div class="sunk">http://www.retrosight.net/~lightgun/index.htm</div></div>
+    <div class="view sunk" id="bootView">
+      <h1>Welcome to <em>RetroSight</em>!!!</h1>
+      <p><span class="new">NEW!</span> Turn your phone into a <b>LIGHT GUN</b>!!</p>
+      <hr>
+      <p class="mq"><span>*** Point at the TV and shoot *** No CRT needed *** Works with your emulators ***</span></p>
+      <div class="cons"><b>UNDER CONSTRUCTION</b></div>
+      <p><a>Click here</a> to see what it does &bull; <a>Download</a> &bull; <a>Sign my Guestbook</a></p>
+      <p>You are visitor number <span class="ctr"><i>0</i><i>0</i><i>4</i><i>1</i><i>7</i></span></p>
+      <p><small>Best viewed at 800 x 600 in 256 colors. Last updated 11/27/96.</small></p>
+    </div>
+    <div class="status"><div class="sunk msg" id="bootMsg">Opening page http://www.retrosight.net/~lightgun/index.htm...</div>
+      <div class="sunk bar" id="bootBar"></div></div>
+  </div>
+  <div class="dlg bv" id="bootDlg">
+    <div class="tb"><span class="ico"></span><span class="t">RetroSight</span></div>
+    <div class="ff">
+      <div class="yr" id="bootYear">1996</div>
+      <div>Hold on, taking this page to the present day.</div>
+      <div class="ffbar sunk"><i id="bootFF"></i></div>
+    </div>
+    <div class="btns"><span class="bv def" id="bootOk">&#9654;&#9654; Fast forward</span></div>
+  </div>
+  <div class="task bv">
+    <span class="start bv"><span class="ico"></span>Start</span>
+    <span class="job bv">RetroSight Home Page</span>
+    <button class="skip bv" type="button" id="bootSkip">Skip intro &#9654;</button>
+    <span class="clock" id="bootClock"></span>
+  </div>
+</div>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">RETRO<span>SIGHT</span></a>
+    <nav aria-label="Sections">
+      <a href="#how">HOW TO PLAY</a>
+      <a href="#loadout">FEATURES</a>
+      <a href="#machines">VIDEOS</a>
+      <a href="#specs">SPECS</a>
+      <a href="#get">BETA</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="horizon"></div>
+    <div class="floor"></div>
+    <div class="wrap">
+      <div>
+        <h1>RETRO<span>SIGHT</span></h1>
+        <p class="tagline">YOUR PHONE IS<br>THE LIGHT GUN</p>
+        <p class="sub">Any flat TV. No CRT, no sensor bar, no IR lights. Point and shoot.</p>
+        <div class="ctas">
+          <a class="btn" href="https://docs.google.com/forms/d/e/1FAIpQLSet90TQqKFTBGCeMzWO2tB5FOy5fC-oZWnKISUYENKc_OWwBQ/viewform?usp=header" target="_blank" rel="noopener">&#9654; JOIN THE BETA</a>
+          <a class="btn alt" href="#machines">WATCH IT WORK</a>
+        </div>
+        <p class="coin" aria-hidden="true">INSERT COIN</p>
+      </div>
+      <!-- VIDEO SLOT 1 -->
+      <div class="cab" data-slot="trailer" data-label="TRAILER">
+        <img src="assets/cabinet.png" alt="RetroSight arcade cabinet">
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">How to play</p>
+        <h2>THREE STEPS TO THE FIRST SHOT</h2>
+        <p>The phone's camera tracks the room, not the TV. RetroSight knows where you are and where the screen is, so the aim holds when you move around.</p>
+      </div>
+      <div class="card">
+        <ol class="steps">
+          <li><div><h3>PAIR BY QR CODE</h3><p>Run the free PC app on Windows, Linux or a Raspberry Pi 5. Scan the code with the phone. It finds your emulators and sets them up for the gun.</p></div></li>
+          <li><div><h3>MEASURE YOUR TV</h3><p>Sweep the phone across the markers on screen once. The PC works out the TV's size and where it sits in your room, then remembers the spot.</p></div></li>
+          <li><div><h3>LOCK ON AND SHOOT</h3><p>Point at the TV for about a second to lock on, take 5 shots at the targets, and play. Shoot off-screen or flick the phone to reload.</p></div></li>
+        </ol>
+        <div class="side">
+          <!-- VIDEO SLOT 2 -->
+          <div class="cab" data-slot="setup" data-label="SETUP">
+            <img src="assets/cabinet.png" alt="Cabinet showing the setup video">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="loadout" class="stripe">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Select your loadout</p>
+        <h2>WHAT'S IN THE MACHINE</h2>
+        <p>Everything below is in the app today, on the phone and the PC.</p>
+      </div>
+      <div class="grid">
+        <article class="f" style="--c: var(--neon)"><span class="tag">AIM</span><h3>ABSOLUTE AIM, ANY FLAT TV</h3>
+          <p>Point at the spot and that's where the shot lands. Works on TVs and monitors of any size, including big living-room screens.</p></article>
+        <article class="f" style="--c: var(--cyan)"><span class="tag">AIM</span><h3>FINDS THE TV AGAIN</h3>
+          <p>Saved locations per room. Pick the phone back up and it recognises the room and puts the aim back on the locked spot.</p></article>
+        <article class="f" style="--c: var(--magenta)"><span class="tag">AIM</span><h3>STEADY SHOTS</h3>
+          <p>Built-in shot processing keeps every shot on target, so it lands where you meant it to.</p></article>
+        <article class="f" style="--c: var(--gold)"><span class="tag">SETUP</span><h3>EMULATORS SET UP FOR YOU</h3>
+          <p>The PC app writes each emulator's own gun settings, with a backup and one-tap undo. RetroArch, MAME, DuckStation, PCSX2, Dolphin and more.</p></article>
+        <article class="f" style="--c: var(--hot)"><span class="tag">SETUP</span><h3>ROOM CHECK</h3>
+          <p>Too dark, or nothing for the camera to hold on to? It tells you why and what to try, then lets you carry on anyway. Printable tracking sheets for plain walls.</p></article>
+        <article class="f" style="--c: var(--violet)"><span class="tag">SETUP</span><h3>LAST-SESSION REPORT</h3>
+          <p>After a game the PC app explains what went wrong, if anything, and how to fix it: lighting, Wi-Fi, tracking drops.</p></article>
+        <article class="f" style="--c: var(--hot)"><span class="tag">FEEL</span><h3>RELOAD LIKE A LIGHT GUN</h3>
+          <p>Shoot off-screen to reload, or flick the phone. The flick sensitivity is yours to tune.</p></article>
+        <article class="f" style="--c: var(--gold)"><span class="tag">FEEL</span><h3>SOUNDS AND RECOIL</h3>
+          <p>Gun, zap, phaser or retro sound sets, picked to suit the game. A recoil buzz on every shot, with strength you can set.</p></article>
+        <article class="f" style="--c: var(--neon)"><span class="tag">FEEL</span><h3>SIGHTS ON THE PHONE</h3>
+          <p>A sight mark on the edge of the phone's screen gives you the same aiming reference every shot, for games without their own crosshair.</p></article>
+        <article class="f" style="--c: var(--cyan)"><span class="tag">PLAY</span><h3>TWO PLAYERS</h3>
+          <p>A friend joins with their own phone: two guns at once in MAME.</p></article>
+        <article class="f" style="--c: var(--magenta)"><span class="tag">PLAY</span><h3>TARGET PRACTICE</h3>
+          <p>A shooting gallery with a score and a rank. It fine-tunes your aim from where your shots land.</p></article>
+        <article class="f" style="--c: var(--violet)"><span class="tag">PLAY</span><h3>PC REMOTE</h3>
+          <p>Start games from the phone, and use it as the PC's touchpad and keyboard from the couch.</p></article>
+      </div>
+    </div>
+    <div class="marquee" aria-label="Supported emulators">
+      <div class="track">
+        <span>RETROARCH</span><span>MAME</span><span>DUCKSTATION</span><span>PCSX2 GUNCON2</span><span>DOLPHIN WII POINTER</span><span>FLYCAST</span><span>SUPERMODEL</span><span>MESEN</span><span>TEKNOPARROT</span>
+        <span aria-hidden="true">RETROARCH</span><span aria-hidden="true">MAME</span><span aria-hidden="true">DUCKSTATION</span><span aria-hidden="true">PCSX2 GUNCON2</span><span aria-hidden="true">DOLPHIN WII POINTER</span><span aria-hidden="true">FLYCAST</span><span aria-hidden="true">SUPERMODEL</span><span aria-hidden="true">MESEN</span><span aria-hidden="true">TEKNOPARROT</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="machines">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Now playing</p>
+        <h2>SEE IT ON THE BIG SCREEN</h2>
+        <p>Tap a machine to watch full size.</p>
+      </div>
+      <div class="row">
+        <!-- VIDEO SLOT 3 -->
+        <div class="machine">
+          <div class="cab" data-slot="gameplay" data-label="GAMEPLAY"><img src="assets/cabinet.png" alt="Cabinet showing gameplay"></div>
+          <h3>GAMEPLAY</h3><p>Shooting at a living-room TV with the phone.</p>
+        </div>
+        <!-- VIDEO SLOT 4 -->
+        <div class="machine">
+          <div class="cab" data-slot="demo" data-label="DEMO"><img src="assets/cabinet.png" alt="Cabinet showing the demo mode"></div>
+          <h3>DEMO MODE</h3><p>The built-in showcase: accuracy, corners, speed, tracking, reload.</p>
+        </div>
+        <!-- VIDEO SLOT 5 -->
+        <div class="machine">
+          <div class="cab" data-slot="grip" data-label="GRIP"><img src="assets/cabinet.png" alt="Cabinet showing the 3D-printed grip"></div>
+          <h3>3D-PRINTED GRIP</h3><p>An optional snap-on grip you can print yourself. Real buttons coming soon.</p>
+        </div>
+      </div>
+      <div class="stages" aria-label="DEMO mode stages">
+        <div class="stage"><b>1 ACCURACY</b><span>A 3x3 grid hit in order, with the average error.</span></div>
+        <div class="stage"><b>2 CORNERS</b><span>The far corners and edges, where light guns struggle.</span></div>
+        <div class="stage"><b>3 SPEED</b><span>Targets pop up at random. Reaction time per hit.</span></div>
+        <div class="stage"><b>4 TRACKING</b><span>Follow a moving target. Time on target and Wi-Fi delay.</span></div>
+        <div class="stage"><b>5 RELOAD</b><span>Off-screen and back on target. How fast.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="specs" class="stripe">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Spec sheet</p>
+        <h2>WHAT YOU NEED</h2>
+      </div>
+      <div class="specs">
+        <div class="sheet"><h3>PLAYER</h3>
+          <dl>
+            <dt>PHONE</dt><dd>Android with Google Play Services for AR (ARCore)<small>Tuned most on recent Samsung Galaxy phones</small></dd>
+            <dt>ROOM</dt><dd>Reasonably bright, with furniture or pictures in view<small>Tracking sheets included for plain walls</small></dd>
+            <dt>NETWORK</dt><dd>Phone and PC on the same Wi-Fi<small>No Wi-Fi? The phone's hotspot works too</small></dd>
+          </dl>
+        </div>
+        <div class="sheet"><h3>MACHINE</h3>
+          <dl>
+            <dt>PC</dt><dd>Windows 10/11, Linux x86_64 or Raspberry Pi 5<small>The PC app is free</small></dd>
+            <dt>SCREEN</dt><dd>Any flat TV or monitor<small>Streaming to the TV works too</small></dd>
+            <dt>GAMES</dt><dd>Light-gun games you own, in an emulator<small>RetroSight includes no games, ROMs or BIOS files</small></dd>
+          </dl>
+        </div>
+        <div class="sheet"><h3>PRIVACY</h3>
+          <dl>
+            <dt>ACCOUNTS</dt><dd>None. No ads, no tracking.</dd>
+            <dt>CAMERA</dt><dd>Images are processed on the phone and never uploaded</dd>
+            <dt>TRAFFIC</dt><dd>Only between your phone and your own PC, on your network</dd>
+          </dl>
+        </div>
+        <div class="sheet"><h3>EXTRAS</h3>
+          <dl>
+            <dt>LAG TEST</dt><dd>A flash-and-clock screen for filming the delay in slow motion</dd>
+            <dt>BUTTONS</dt><dd>Move and resize every on-screen button, or use the phone's own keys</dd>
+            <dt>GRIP</dt><dd>3D-print files for a snap-on grip</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="get" class="get">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Press start</p>
+        <h2>GET RETROSIGHT</h2>
+        <p>The Android app is in testing on Google Play. Sign up and you'll get an invite to the beta. Tell us your phone model: it helps decide which grips to make first.</p>
+      </div>
+      <div class="ctas">
+        <a class="btn" href="https://docs.google.com/forms/d/e/1FAIpQLSet90TQqKFTBGCeMzWO2tB5FOy5fC-oZWnKISUYENKc_OWwBQ/viewform?usp=header" target="_blank" rel="noopener">&#9654; SIGN UP FOR THE BETA</a>
+        <a class="btn alt" id="play-link" href="#get" hidden>ANDROID: GOOGLE PLAY</a>
+      </div>
+      <p class="note">The free PC app for Windows, Linux and Raspberry Pi 5 is coming soon.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>RetroSight &middot; Your phone is the light gun</span>
+    <span><a href="privacy.html">Privacy policy</a></span>
+  </div>
+</footer>
+
+<script>
+/* ======================================================================
+   VIDEO SLOTS: put a video in a cabinet's screen.
+   Either a file in docs/videos/ (e.g. "videos/trailer.mp4", plays muted on a loop in the
+   cabinet and with sound when tapped) or a YouTube link (tapping opens it full size).
+   Leave "" and the cabinet shows its attract screen.
+   ====================================================================== */
+const VIDEOS = {
+  trailer:  "videos/hook.mp4",   // hero cabinet (the hook, with its music)
+  setup:    "",   // "How to play" cabinet
+  gameplay: "",   // Now playing 1
+  demo:     "",   // Now playing 2
+  grip:     "",   // Now playing 3
+};
+/* Google Play testing link, when there is one: */
+const PLAY_URL = "";
+
+(function () {
+  const ytId = (u) => {
+    const m = String(u).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/);
+    return m ? m[1] : null;
+  };
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function openBig(src, small) {
+    const id = ytId(src);
+    const wasPlaying = small && !small.paused;
+    if (small) small.pause();
+    const big = document.createElement("div");
+    big.className = "big"; big.setAttribute("role", "dialog"); big.setAttribute("aria-label", "Video");
+    big.innerHTML = '<div class="tv"></div><button class="x" type="button">CLOSE &#10005;</button>';
+    const tv = big.querySelector(".tv");
+    if (id) {
+      tv.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="Video"></iframe>';
+    } else {
+      const v = document.createElement("video");
+      v.src = src; v.controls = true; v.autoplay = true; v.playsInline = true;
+      if (small) v.currentTime = small.currentTime;
+      v.addEventListener("loadedmetadata", () => {   // portrait or landscape: the TV takes the video's shape
+        const r = v.videoWidth / v.videoHeight;
+        if (r) { tv.style.aspectRatio = String(r); tv.style.width = "min(1100px, 100%, calc(85vh * " + r.toFixed(4) + "))"; }
+      });
+      tv.appendChild(v);
+    }
+    const close = () => {
+      big.remove(); document.removeEventListener("keydown", esc);
+      if (small && wasPlaying) small.play().catch(() => {});
+    };
+    const esc = (e) => { if (e.key === "Escape") close(); };
+    big.addEventListener("click", (e) => { if (e.target === big) close(); });
+    big.querySelector(".x").addEventListener("click", close);
+    document.addEventListener("keydown", esc);
+    document.body.appendChild(big);
+    big.querySelector(".x").focus();
+  }
+
+  document.querySelectorAll(".cab[data-slot]").forEach((cab, i) => {
+    const src = (VIDEOS[cab.dataset.slot] || "").trim();
+    const screen = document.createElement(src ? "button" : "div");
+    screen.className = "screen";
+    if (src) {
+      screen.type = "button";
+      screen.setAttribute("aria-label", "Play the " + cab.dataset.label.toLowerCase() + " video");
+      const id = ytId(src);
+      if (id) {
+        const img = document.createElement("img");
+        img.src = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"; img.alt = "";
+        img.style.cssText = "width:100%;height:100%;object-fit:cover;display:block";
+        screen.appendChild(img);
+      }
+      let v = null;
+      if (!id) {
+        v = document.createElement("video");
+        v.src = src; v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata";
+        v.autoplay = !reduce;
+        screen.appendChild(v);
+        // browsers only allow sound after the visitor taps something: the marquee turns it on and off
+        const snd = document.createElement("button");
+        snd.type = "button"; snd.className = "snd";
+        const show = () => { snd.textContent = v.muted ? "♪ SOUND ON" : "♪ SOUND OFF"; snd.setAttribute("aria-pressed", String(!v.muted)); };
+        const setSound = (on) => { v.muted = !on; if (on && v.paused) v.play().catch(() => {}); show(); };
+        snd.addEventListener("click", () => setSound(v.muted));
+        show();
+        cab.appendChild(snd);
+        // tapped or pressed a key during the intro: that counts as a tap, so the hero starts with its music
+        if (cab.dataset.slot === "trailer") document.addEventListener("rs-intro-done", (e) => { if (e.detail && e.detail.user) setSound(true); });
+      }
+      screen.addEventListener("click", () => openBig(src, v));
+      const play = document.createElement("button");
+      play.type = "button"; play.className = "play"; play.textContent = "▶ BIG SCREEN";
+      play.addEventListener("click", () => openBig(src, v));
+      cab.appendChild(play);
+    } else {
+      screen.innerHTML = '<div class="attract" aria-hidden="true"><div class="ch"></div><div class="lbl">VIDEO ' + (i + 1) + ' SOON</div></div>';
+    }
+    cab.prepend(screen);
+  });
+
+  const play = document.getElementById("play-link");
+  if (PLAY_URL) { play.href = PLAY_URL; play.target = "_blank"; play.rel = "noopener"; play.hidden = false; }
+
+  // every click is a shot: a ring pops where it lands
+  if (!reduce) document.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse") return;
+    const h = document.createElement("div");
+    h.className = "hit"; h.style.left = e.clientX + "px"; h.style.top = e.clientY + "px";
+    document.body.appendChild(h);
+    setTimeout(() => h.remove(), 520);
+  });
+})();
+</script>
+<script>
+/* Intro: once per visit. Add #intro to the address to see it again. */
+(function () {
+  const boot = document.getElementById("boot");
+  if (!boot) return;
+  let seen = false;
+  try { seen = sessionStorage.getItem("rs-intro") === "1"; } catch (e) {}
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (location.hash === "#intro") seen = false;
+  else if (seen || reduce || location.hash) return;      // deep links go straight to their section
+  try { sessionStorage.setItem("rs-intro", "1"); } catch (e) {}
+
+  const view = document.getElementById("bootView"), msg = document.getElementById("bootMsg"),
+        bar = document.getElementById("bootBar"), dlg = document.getElementById("bootDlg"),
+        ok = document.getElementById("bootOk");
+  const d = new Date();
+  document.getElementById("bootClock").textContent =
+    ((d.getHours() + 11) % 12 + 1) + ":" + String(d.getMinutes()).padStart(2, "0") + (d.getHours() < 12 ? " AM" : " PM");
+  for (let i = 0; i < 14; i++) bar.appendChild(document.createElement("i"));
+  boot.hidden = false;
+  document.documentElement.style.overflow = "hidden";
+
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  // the 1996 page comes in line by line, like a 28.8k modem
+  [...view.children].forEach((el, i) => at(180 + i * 230, () => el.classList.add("on")));
+  [...bar.children].forEach((el, i) => at(120 + i * 140, () => el.classList.add("on")));
+  at(2050, () => { msg.textContent = "Done"; });
+  at(2250, () => { dlg.classList.add("on"); ok.classList.add("down"); msg.textContent = "Fast-forwarding to 2026..."; });
+  // the year rolls 1996 -> 2026 while the bar fills
+  const yr = document.getElementById("bootYear"), ff = document.getElementById("bootFF");
+  for (let k = 0; k <= 30; k++) at(2350 + k * 26, () => { yr.textContent = 1996 + k; ff.style.width = (k / 30 * 100) + "%"; });
+  at(3250, () => { dlg.classList.remove("on"); boot.classList.add("max"); });
+  at(3700, () => boot.classList.add("glitch"));
+  at(4200, finish);
+
+  let done = false;
+  function finish(user) {
+    if (done) return; done = true;
+    const tapped = !!user;
+    timers.forEach(clearTimeout);
+    boot.classList.remove("glitch");
+    boot.classList.add("off");
+    document.body.classList.add("powering");
+    setTimeout(() => {
+      boot.remove();
+      document.documentElement.style.overflow = "";
+      document.dispatchEvent(new CustomEvent("rs-intro-done", { detail: { user: tapped } }));
+      setTimeout(() => document.body.classList.remove("powering"), 700);
+    }, 420);
+  }
+  document.getElementById("bootSkip").addEventListener("click", finish);
+  boot.addEventListener("click", finish);
+  document.addEventListener("keydown", function k() { document.removeEventListener("keydown", k); finish(true); });
+  if (location.hash === "#intro") { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} }
+})();
+</script>
+</body>
+</html>
