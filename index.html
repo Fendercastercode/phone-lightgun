@@ -134,14 +134,15 @@ p { margin: 0; }
 
 /* the arcade's back wall: wavy neon tubes with a lit "snake" running along each, like the app's menu */
 .wall { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; display: block; }
-#wall-page { position: fixed; z-index: -1; }
+#how { position: relative; }
+#wall-how { z-index: -1; }
 .hero .wrap { z-index: 1; }
 
 /* ---------- sections */
 section { padding-block: 84px; scroll-margin-top: 50px; }
 .head { display: grid; gap: 12px; margin-bottom: 40px; max-width: 760px; }
 .head p { color: var(--dim); font-size: 17px; }
-.stripe { background: linear-gradient(rgba(15,10,36,0), rgba(26,16,56,.72) 30%, rgba(26,16,56,.72) 70%, rgba(15,10,36,0)); }
+.stripe { background: linear-gradient(var(--night), var(--night-2) 30%, var(--night-2) 70%, var(--night)); }
 
 /* how to play: styled as a cabinet's instruction card */
 .card { border: 3px solid var(--neon); background: var(--panel); box-shadow: 0 0 24px rgba(61,255,110,.2);
@@ -379,7 +380,6 @@ body.powering main, body.powering .top { animation: poweron .7s ease-out both; }
   </div>
 </header>
 
-<canvas class="wall" id="wall-page" aria-hidden="true"></canvas>
 <main id="top">
   <div class="hero">
     <canvas class="wall" id="wall-hero" aria-hidden="true"></canvas>
@@ -404,6 +404,7 @@ body.powering main, body.powering .top { animation: poweron .7s ease-out both; }
   </div>
 
   <section id="how">
+    <canvas class="wall" id="wall-how" aria-hidden="true"></canvas>
     <div class="wrap">
       <div class="head">
         <p class="eyebrow">How to play</p>
@@ -687,16 +688,16 @@ const PLAY_URL = "";
     [0.78, 0.09, 0.19, 0.035, 3, "magenta", 0.9], [0.02, 0.80, 0.16, 0.03, 3, "lime", 2.7],
     [0.42, 0.74, 0.14, 0.03, 2.5, "violet", 1.35]
   ];
-  const PAGE = [
-    [0.01, 0.16, 0.13, 0.03, 2.5, "magenta", 0.4], [0.86, 0.28, 0.13, 0.035, 3, "cyan", 1.3],
-    [0.02, 0.55, 0.11, 0.03, 2, "yellow", 2.2], [0.87, 0.70, 0.12, 0.03, 3.5, "lime", 3.1],
-    [0.40, 0.93, 0.18, 0.02, 3, "violet", 0.0], [0.45, 0.03, 0.12, 0.015, 2.5, "hot", 2.6]
+  // the "How to play" section, under the hero: the lights stop after the second cabinet
+  const HOW = [
+    [0.72, 0.07, 0.18, 0.02, 3, "magenta", 0.4], [0.88, 0.40, 0.11, 0.03, 3, "cyan", 1.3],
+    [0.01, 0.55, 0.10, 0.03, 2, "yellow", 2.2], [0.88, 0.80, 0.11, 0.03, 3.5, "lime", 3.1]
   ];
-  function wall(cv, tubes, fixed) {
+  function wall(cv, tubes) {
     const g = cv.getContext("2d"); let w = 0, h = 0, dpr = 1, paths = [];
     function size() {
       dpr = Math.min(2, devicePixelRatio || 1);
-      w = fixed ? innerWidth : cv.clientWidth; h = fixed ? innerHeight : cv.clientHeight;
+      w = cv.clientWidth; h = cv.clientHeight;
       cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
       // build each tube as points, with the length along it, so a stretch of it can be lit
       paths = tubes.map(([x, y, len, amp, waves, col, delay]) => {
@@ -706,7 +707,9 @@ const PLAY_URL = "";
           pts.push([x * w + L * f, y * h + A * Math.sin(f * waves * 2 * Math.PI) * (0.55 + 0.45 * Math.sin(f * Math.PI))]);
         }
         const d = [0]; for (let i = 1; i < pts.length; i++) d.push(d[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-        return { pts, d, col: C[col], delay };
+        const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+        return { pts, d, col: C[col], delay, a: 1,
+          box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] };
       });
     }
     function stroke(pts, rgba, width) {
@@ -718,7 +721,16 @@ const PLAY_URL = "";
       const t = ms / 1000;
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
       g.lineCap = "round"; g.lineJoin = "round";
+      // keep the tubes off the cabinets: a tube that would sit behind one fades out until it's clear
+      const o = cv.getBoundingClientRect(), pad = 14;
+      const cabs = [...document.querySelectorAll(".cab")].map(c => c.getBoundingClientRect())
+        .filter(r => r.bottom > o.top && r.top < o.bottom)
+        .map(r => [r.left - o.left - pad, r.top - o.top - pad, r.right - o.left + pad, r.bottom - o.top + pad]);
       for (const p of paths) {
+        const b = p.box, hit = cabs.some(r => b[0] < r[2] && b[2] > r[0] && b[1] < r[3] && b[3] > r[1]);
+        p.a = reduce ? (hit ? 0 : 1) : Math.max(0, Math.min(1, p.a + (hit ? -0.12 : 0.06)));
+        if (p.a <= 0) continue;
+        g.globalAlpha = p.a;
         stroke(p.pts, "rgba(" + p.col + ",.16)", 2.5);                      // unlit glass
         const run = 1.6, cycle = 3.6, snake = 0.35;
         const ph = (((t - p.delay) % cycle) + cycle) % cycle;
@@ -733,14 +745,16 @@ const PLAY_URL = "";
         stroke(seg, "rgb(" + p.col + ")", 2.5);
         stroke(seg, "rgba(255,255,255,.7)", 1);
       }
+      g.globalAlpha = 1;
       if (!reduce) requestAnimationFrame(frame);
     }
     size(); addEventListener("resize", size);
-    if (!fixed && "ResizeObserver" in window) new ResizeObserver(size).observe(cv);
+    if (reduce) addEventListener("resize", () => requestAnimationFrame(frame));
+    if ("ResizeObserver" in window) new ResizeObserver(() => { size(); if (reduce) requestAnimationFrame(frame); }).observe(cv);
     requestAnimationFrame(frame);
   }
-  wall(document.getElementById("wall-hero"), HERO, false);
-  wall(document.getElementById("wall-page"), PAGE, true);
+  wall(document.getElementById("wall-hero"), HERO);
+  wall(document.getElementById("wall-how"), HOW);
 })();
 </script>
 <script>
